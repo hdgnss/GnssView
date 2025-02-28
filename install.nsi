@@ -56,7 +56,6 @@ Section "MainSection" SEC01
   File "build\Release\opengl32sw.dll"
   File "build\Release\Qt6Charts.dll"
   File "build\Release\Qt6Network.dll"
-  File "build\Release\Qt6Pdf.dll"
   File "build\Release\Qt6Widgets.dll"
   SetOutPath "$INSTDIR\iconengines"
   File "build\Release\iconengines\qsvgicon.dll"
