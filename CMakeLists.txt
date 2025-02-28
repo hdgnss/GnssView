@@ -14,7 +14,6 @@ find_package(Qt6 REQUIRED COMPONENTS
     Core 
     Gui 
     Widgets
-    Sql
     Charts
     SerialPort
     Network
@@ -57,7 +56,6 @@ target_link_libraries(GnssView PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
-    Qt6::Sql
     Qt6::Charts
     Qt6::SerialPort
     Qt6::Network
