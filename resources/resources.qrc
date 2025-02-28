@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RCC>
+    <qresource prefix="qss">
+        <file>style.qss</file>
+    </qresource>
+    <qresource prefix="icons">
+        <file>icon.icns</file>
+        <file>icon.ico</file>
+    </qresource>
+</RCC>
