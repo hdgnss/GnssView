@@ -3,6 +3,8 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QFile>
+#include <QDebug>
+#include <QSettings>
 #include <QDateTime>
 #include <QtCharts/QValueAxis>
 #include <QToolTip>
@@ -38,6 +40,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui.lineEditTureSerial->setVisible(false);
     ui.lineEditTureUdp->setVisible(false);
     ui.tabWidgetInfo->setTabVisible(1, false);
+    //ui.chartSnrL5->setVisible(false);
 
     // Initialize objects
     mUdpServer = new UdpServer();
@@ -54,7 +57,17 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initially populate the port list
     updatePortList();
+
+    if (readSettings(PROJECT_NAME, "Version").isEmpty())
+    {
+        writeSettings(PROJECT_NAME, "Version", PROJECT_VER);
+        writeSettings("COMMAND", "Cmd0Text", "Example");
+        writeSettings("COMMAND", "Cmd0Cmd", "gnss start");
+    }
+    initUI();
 }
+
+
 
 MainWindow::~MainWindow()
 {
@@ -79,8 +92,25 @@ MainWindow::~MainWindow()
         delete mNmeaParser;
         mNmeaParser = nullptr;
     }
-    
-    // Chart resources will be automatically cleaned up by Qt's parent-child system
+}
+
+QString MainWindow::readSettings(QString group, QString name)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "HDGNSS", PROJECT_NAME);
+    settings.beginGroup(group);
+    QString value = settings.value(name, "").toString();
+    settings.endGroup();
+
+    return value;
+}
+
+void MainWindow::writeSettings(QString group, QString name, QString value)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "HDGNSS", PROJECT_NAME);
+
+    settings.beginGroup(group);
+    settings.setValue(name, value);
+    settings.endGroup();
 }
 
 void MainWindow::updatePortList()
@@ -105,7 +135,7 @@ void MainWindow::updateSatelliteData(const QVector<GnssSatellite>& satellites)
     
     // Update both charts with the satellite data
     updateChartWithSatellites(satellites, L1_CHART);
-    updateChartWithSatellites(satellites, L5_CHART);
+    // updateChartWithSatellites(satellites, L5_CHART);
 }
 
 
@@ -657,12 +687,12 @@ void MainWindow::onUdpData(const QByteArray &data)
 void MainWindow::onReadSerialData()
 {
     QByteArray data = mSerialPort->readAll();
+    qDebug() << "R:"<< data;
     onUdpData(data);
 }
 
 void MainWindow::onReceivedUdpData(const QByteArray &data, const QHostAddress &sender, quint16 senderPort)
 {
-    //QByteArray data = mSerialPort->readAll();
     onUdpData(data);
 }
 
@@ -685,12 +715,14 @@ void MainWindow::openSerialPort()
         QMessageBox::warning(this, tr("Warning"), tr("No serial ports available."));
         return;
     }
+
+    qDebug() << "BaudRate:" << (ui.comboBoxBaudRate->currentText());
     
     mSerialPort->setPortName(ui.comboBoxSerialPort->currentData().toString());
-    mSerialPort->setBaudRate(ui.comboBoxBaudRate->currentData().toInt());
-    mSerialPort->setDataBits(static_cast<QSerialPort::DataBits>(ui.comboBoxDataBits->currentData().toInt()));
-    mSerialPort->setParity(static_cast<QSerialPort::Parity>(ui.comboBoxParity->currentData().toInt()));
-    mSerialPort->setStopBits(static_cast<QSerialPort::StopBits>(ui.comboBoxStopBits->currentData().toInt()));
+    mSerialPort->setBaudRate(qint32(ui.comboBoxBaudRate->currentText().toInt()));
+    mSerialPort->setDataBits(static_cast<QSerialPort::DataBits>(ui.comboBoxDataBits->currentText().toInt()));
+    mSerialPort->setParity(QSerialPort::NoParity);//ui.comboBoxParity->currentData().toInt()));
+    mSerialPort->setStopBits(static_cast<QSerialPort::StopBits>(ui.comboBoxStopBits->currentText().toInt()));
     
     if (mSerialPort->open(QIODevice::ReadWrite)) {
         ui.comboBoxSerialPort->setEnabled(false);
@@ -709,9 +741,9 @@ void MainWindow::openSerialPort()
                              .arg(ui.comboBoxStopBits->currentText())
                             );
     } else {
-        QMessageBox::critical(this, tr("Error"), tr("Failed to open port %1: %2")
+        QMessageBox::critical(this, tr("Error"), tr("Failed to open port %1: %2, %3")
                                               .arg(mSerialPort->portName())
-                                              .arg(mSerialPort->errorString()));
+                                              .arg(mSerialPort->errorString()) .arg(qint32(ui.comboBoxBaudRate->currentData().toInt())));
     }
 }
 
@@ -734,6 +766,43 @@ void MainWindow::closeSerialPort()
 void MainWindow::applyTheme()
 {
     loadStyleSheet(":qss/style.qss");
+}
+
+
+void MainWindow::initUI()
+{
+    const QList<QPushButton *> cmdPushButtonList = {ui.pushButtonCmd1, ui.pushButtonCmd2, ui.pushButtonCmd3, ui.pushButtonCmd4, ui.pushButtonCmd5, ui.pushButtonCmd6, ui.pushButtonCmd7, ui.pushButtonCmd8, ui.pushButtonCmd9, ui.pushButtonCmd10, ui.pushButtonCmd11, ui.pushButtonCmd12, ui.pushButtonCmd13, ui.pushButtonCmd14};
+    
+    for (int i = 0; i < cmdPushButtonList.size(); ++i)
+    {
+        QString text = readSettings("COMMAND", "Cmd"+QString::number(i)+"Text");
+        QString cmd = readSettings("COMMAND", "Cmd"+QString::number(i)+"Cmd");
+        if (!text.isEmpty() && !cmd.isEmpty())
+        {
+            cmdPushButtonList.at(i)->setEnabled(true);
+            cmdPushButtonList.at(i)->setText(text);
+            mPushButtonCmd[cmdPushButtonList.at(i)] = cmd;
+            connect(cmdPushButtonList.at(i), &QPushButton::clicked, this, &MainWindow::onPushButtonCmdClicked);
+        }
+        else{
+            cmdPushButtonList.at(i)->setEnabled(false);
+        }
+    }
+}
+
+void MainWindow::onPushButtonCmdClicked()
+{
+    QPushButton *senderPushButton = qobject_cast<QPushButton *>(sender());
+
+    if (!mPushButtonCmd[senderPushButton].isEmpty())
+    {
+        if (mSerialPort->isOpen())
+        {
+            qDebug() << "Send: "<< mPushButtonCmd[senderPushButton];
+            mSerialPort->write(mPushButtonCmd[senderPushButton].toUtf8());
+            mSerialPort->write("\r\n");
+        }
+    }
 }
 
 void MainWindow::about()

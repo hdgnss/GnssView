@@ -173,6 +173,12 @@
                 <height>40</height>
                </size>
               </property>
+              <property name="maximumSize">
+               <size>
+                <width>200</width>
+                <height>40</height>
+               </size>
+              </property>
              </widget>
             </item>
             <item row="0" column="5" rowspan="2">
@@ -728,6 +734,122 @@
              <widget class="QLabel" name="label_42">
               <property name="text">
                <string>TextLabel</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="tabCommand">
+         <attribute name="title">
+          <string>Command</string>
+         </attribute>
+         <layout class="QGridLayout" name="gridLayout_12">
+          <item row="0" column="0">
+           <layout class="QGridLayout" name="gridLayout_11">
+            <item row="0" column="1">
+             <widget class="QPushButton" name="pushButtonCmd2">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="2">
+             <widget class="QPushButton" name="pushButtonCmd12">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QPushButton" name="pushButtonCmd5">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QPushButton" name="pushButtonCmd3">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QPushButton" name="pushButtonCmd13">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="2">
+             <widget class="QPushButton" name="pushButtonCmd6">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QPushButton" name="pushButtonCmd1">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="2">
+             <widget class="QPushButton" name="pushButtonCmd0">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QPushButton" name="pushButtonCmd11">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QPushButton" name="pushButtonCmd4">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QPushButton" name="pushButtonCmd14">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QPushButton" name="pushButtonCmd10">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QPushButton" name="pushButtonCmd7">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QPushButton" name="pushButtonCmd8">
+              <property name="text">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="2">
+             <widget class="QPushButton" name="pushButtonCmd9">
+              <property name="text">
+               <string></string>
               </property>
              </widget>
             </item>

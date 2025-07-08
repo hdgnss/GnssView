@@ -43,6 +43,7 @@ public:
     void onUdpData(const QByteArray &data);
     void onReceivedUdpData(const QByteArray &data, const QHostAddress &sender, quint16 senderPort);
     void onNmeaParseDone(GnssInfo gnssinfo);
+    void onPushButtonCmdClicked();
     void about();
 
 
@@ -74,9 +75,15 @@ public:
     // Connection and UI methods
     void connectSignals();
     void applyTheme();
+    void initUI();
     void loadStyleSheet(const QString& theme);
     void updatePortList();
     void updateStatusDisplay(const GnssInfo& gnssInfo);
+
+    QString readSettings(QString group, QString name);
+    void writeSettings(QString group, QString name, QString value);
+
+    QMap<QPushButton *, QString> mPushButtonCmd;
 
     Ui::MainWindow ui;
 }; 
