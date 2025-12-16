@@ -1,0 +1,54 @@
+name: Macintosh
+
+on:
+  push:
+    tags:
+      - VM*
+  pull_request:
+    branches: [ master ]
+
+env:
+  BUILD_TYPE: Release
+  TARGET_NAME: GnssView
+
+jobs:
+  build:
+    name: Build on OSX
+    runs-on: macos-12
+
+    steps:
+    - name: Prepare
+      run: |
+        sudo xcode-select --print-path
+        sudo xcode-select --switch /Library/Developer/CommandLineTools   
+
+    - name: Set up Homebrew
+      uses: Homebrew/actions/setup-homebrew@master  
+
+    - name: Homebrew install 
+      run: brew install create-dmg ninja
+
+    - name: Install QT
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.8.0
+        cached: 'false'
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Configure
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -G Ninja
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{ env.BUILD_TYPE }}
+
+    - name: Release
+      if: startsWith(github.event.ref, 'refs/tags/')
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: build/${{ env.TARGET_NAME }}.dmg
+        asset_name: ${{ env.TARGET_NAME }}_osx_${{ github.ref_name }}.dmg
+        tag: ${{ github.ref }}
+        overwrite: true

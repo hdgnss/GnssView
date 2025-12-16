@@ -1,0 +1,11 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// Application version - auto-generated from CMakeLists.txt
+#define APP_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@"
+#define APP_VERSION_MINOR "@PROJECT_VERSION_MINOR@"
+#define APP_VERSION_PATCH "@PROJECT_VERSION_PATCH@"
+#define APP_VERSION_STRING "@PROJECT_VERSION@"
+#define APP_NAME "@PROJECT_NAME@"
+
+#endif // CONFIG_H

@@ -1,0 +1,36 @@
+---
+Language: Cpp
+# Use Google as a base but modify for Qt/User preferences
+BasedOnStyle: Google
+
+# 120 chars line length as requested
+ColumnLimit: 120
+
+# 4 space indentation as per previous Qt Style tasks
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+
+# Qt standard brace wrapping (usually Attach, but let's be explicit)
+BreakBeforeBraces: Attach
+
+# Initializer lists
+ConstructorInitializerIndentWidth: 4
+
+# Pointer alignment (Qt often uses *name, Google uses * name or name*)
+# We'll stick to derived Google for consistency unless specified, 
+# but usually Qt prefers Ptr* var.
+PointerAlignment: Right
+
+# Sort includes (Qt headers first, etc is handled by some tools, but clang-format just sorts alphabetically)
+SortIncludes: true
+
+# Force functions to be on new lines
+AllowShortFunctionsOnASingleLine: None
+
+# Force braces for all control statements
+InsertBraces: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
