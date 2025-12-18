@@ -35,6 +35,9 @@
 #include "communicationmanager.h"
 #include "core/updatechecker.h"
 #include "datalogger.h"
+#include "devices/allystar.h"
+#include "devices/goldfish.h"
+#include "devices/ublox.h"
 #include "nmeaparser.h"
 #include "ui/cmdbuttondialog.h"
 #include "ui/settingsdialog.h"
@@ -49,7 +52,11 @@ MainWindow::MainWindow(QWidget *parent)
       m_serialBLogger(new DataLogger(this)),
       m_tcpLogger(new DataLogger(this)),
       m_udpLogger(new DataLogger(this)),
-      m_ntripLogger(new DataLogger(this)) {
+      m_ntripLogger(new DataLogger(this)),
+      m_ubloxDecoder(new UbloxDecoder()),
+      m_allystarDecoder(new AllystarDecoder()),
+      m_goldfishDecoder(new GoldfishDecoder()),
+      m_binaryProtocol("Auto") {
     ui->setupUi(this);
 
     // Set Layout Stretch (4x3)
@@ -61,6 +68,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->gridLayout->setColumnStretch(2, 1);
     ui->gridLayout->setColumnStretch(3, 1);
 
+    loadSettings();
     loadPorts();
     setupConnections();
     loadCommandButtons();
@@ -76,7 +84,7 @@ MainWindow::MainWindow(QWidget *parent)
         refreshCommandButtons();
     });
 
-    loadSettings();
+    // Column change is now handled in loadCommandButtons/refreshCommandButtons
 
     ui->labelStatusSerialA->setStyleSheet("color: black; font-size: 18pt;");
     ui->labelStatusSerialB->setStyleSheet("color: black; font-size: 18pt;");
@@ -180,6 +188,8 @@ void MainWindow::setupConnections() {
         ui->buttonTcpConnect->setText(connected ? "Disconnect" : "Connect");
         ui->labelStatusTcp->setStyleSheet(connected ? "color: green; font-size: 18pt;"
                                                     : "color: black; font-size: 18pt;");
+        ui->statusbar->showMessage("TCP: " + msg, 5000);
+
         if (connected) {
             m_tcpLogger->startLogging("tcp");
         } else {
@@ -390,6 +400,25 @@ void MainWindow::processRawData(const QByteArray &data, const QString &source) {
         buffer = buffer.right(MAX_RX_BUFFER_SIZE);
     }
 
+    // Try to process binary packets first (UBX/ALLYSTAR)
+    while (tryProcessBinaryPacket(buffer, source)) {
+        // Keep processing binary packets until none found at position 0
+    }
+
+    // NEW: If the buffer starts with a binary sync but was not processed by
+    // tryProcessBinaryPacket(), it's likely incomplete. We must STOP here
+    // to prevent the NMEA loop from search-and-deleting it as "garbage".
+    if (buffer.length() >= 2) {
+        uint8_t b0 = (uint8_t)buffer[0];
+        uint8_t b1 = (uint8_t)buffer[1];
+        bool isBinarySync = (b0 == 0xB5 && b1 == 0x62) ||  // UBX
+                            (b0 == 0xF1 && b1 == 0xD9) ||  // ALLYSTAR
+                            (b0 == 0xBC && b1 == 0xB2);    // GOLDFISH
+        if (isBinarySync) {
+            return;  // Wait for more data
+        }
+    }
+
     while (true) {
         // 1. Look for start of NMEA sentence: '$' or '!'
         int startIdx = buffer.indexOf('$');
@@ -503,6 +532,87 @@ void MainWindow::sendToSelectedPorts(const QByteArray &data) {
     }
 }
 
+bool MainWindow::tryProcessBinaryPacket(QByteArray &buffer, const QString &source) {
+    if (buffer.isEmpty()) {
+        return false;
+    }
+
+    // Check for UBX packet (0xB5 0x62)
+    if (buffer.length() >= 2 && (m_binaryProtocol == "Auto" || m_binaryProtocol == "UBX")) {
+        if ((uint8_t)buffer[0] == 0xB5 && (uint8_t)buffer[1] == 0x62) {
+            int bytesProcessed = 0;
+            if (m_ubloxDecoder && m_ubloxDecoder->decodePacket(buffer, bytesProcessed)) {
+                UbxPacketInfo info = m_ubloxDecoder->getLastPacketInfo();
+                displayBinaryPacket(source, "UBX", info.msgName, info.length, info.payload);
+            }
+            if (bytesProcessed > 0) {
+                buffer.remove(0, bytesProcessed);
+                return true;
+            }
+        }
+    }
+
+    // Check for ALLYSTAR packet (0xF1 0xD9)
+    if (buffer.length() >= 2 && (m_binaryProtocol == "Auto" || m_binaryProtocol == "ALLYSTAR")) {
+        if ((uint8_t)buffer[0] == 0xF1 && (uint8_t)buffer[1] == 0xD9) {
+            int bytesProcessed = 0;
+            if (m_allystarDecoder && m_allystarDecoder->decodePacket(buffer, bytesProcessed)) {
+                AllystarPacketInfo info = m_allystarDecoder->getLastPacketInfo();
+                displayBinaryPacket(source, "ALLYSTAR", info.msgName, info.length, info.payload);
+            }
+            if (bytesProcessed > 0) {
+                buffer.remove(0, bytesProcessed);
+                return true;
+            }
+        }
+    }
+
+    // Check for Goldfish packet (0xBC 0xB2)
+    if (buffer.length() >= 2 && (m_binaryProtocol == "Auto" || m_binaryProtocol == "GOLDFISH")) {
+        if ((uint8_t)buffer[0] == 0xBC && (uint8_t)buffer[1] == 0xB2) {
+            int bytesProcessed = 0;
+            if (m_goldfishDecoder && m_goldfishDecoder->decodePacket(buffer, bytesProcessed)) {
+                GoldfishPacketInfo info = m_goldfishDecoder->getLastPacketInfo();
+                displayBinaryPacket(source, "GOLDFISH", info.msgName, info.length, info.payload);
+            }
+            if (bytesProcessed > 0) {
+                buffer.remove(0, bytesProcessed);
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void MainWindow::displayBinaryPacket(const QString &source, const QString &protocol, const QString &msgName, int length,
+                                     const QByteArray &payload) {
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+    QString hexPayload;
+    if (!payload.isEmpty()) {
+        int displayLen = qMin(payload.size(), 32);  // Show up to 32 bytes
+        for (int i = 0; i < displayLen; ++i) {
+            hexPayload += QString("%1 ").arg((uint8_t)payload[i], 2, 16, QChar('0')).toUpper();
+        }
+        if (payload.size() > 32) {
+            hexPayload += "...";
+        }
+    }
+
+    QTextCursor cursor = ui->plainTextEditRaw->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    ui->plainTextEditRaw->setTextCursor(cursor);
+
+    QString line = QString("[%1][%2] %3 %4 (%5 bytes)").arg(timeStr, source, protocol, msgName).arg(length + 8);
+    if (!hexPayload.isEmpty()) {
+        line += " DATA: " + hexPayload;
+    }
+    line += "\n";
+
+    ui->plainTextEditRaw->insertPlainText(line);
+    ui->plainTextEditRaw->ensureCursorVisible();
+}
+
 void MainWindow::loadCommandButtons() {
     m_commands.clear();
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "HDGNSS", "GnssView");
@@ -516,39 +626,142 @@ void MainWindow::loadCommandButtons() {
     ui->spinCmdCols->setValue(cols);
     ui->spinCmdCols->blockSignals(false);
 
-    int size = settings.beginReadArray("buttons");
-    for (int i = 0; i < size; ++i) {
-        settings.setArrayIndex(i);
-        CommandDefinition cmd;
-        cmd.name = settings.value("name").toString();
-        cmd.hexData = settings.value("hex").toString();
-        cmd.group = settings.value("group").toString();
-        m_commands.append(cmd);
+    bool migrationNeeded = false;
+    QString storedVersion = settings.value("version").toString();
+
+    // 1. Explicit Conversion Check: Check for old format (backward compatibility)
+    // We migrate if version is < 0.1.1 OR if the [buttons] section exists
+    if (UpdateChecker::compareVersions(storedVersion, "0.1.1") < 0 || settings.contains("buttons/size") ||
+        !settings.allKeys().filter(QRegularExpression("^buttons/")).isEmpty()) {
+        // Use a more robust manual scan instead of beginReadArray
+        QMap<int, CommandDefinition> legacyMap;
+        QRegularExpression keyRegex("^buttons/(\\d+)/(.+)$");
+
+        for (const QString &key : settings.allKeys()) {
+            QRegularExpressionMatch match = keyRegex.match(key);
+            if (match.hasMatch()) {
+                int index = match.captured(1).toInt();
+                QString prop = match.captured(2);
+
+                if (prop == "name") {
+                    legacyMap[index].name = settings.value(key).toString();
+                } else if (prop == "hex") {
+                    legacyMap[index].hexData = settings.value(key).toString();
+                } else if (prop == "group") {
+                    legacyMap[index].group = settings.value(key).toString();
+                }
+            }
+        }
+
+        if (!legacyMap.isEmpty()) {
+            for (auto it = legacyMap.begin(); it != legacyMap.end(); ++it) {
+                CommandDefinition cmd = it.value();
+                if (cmd.group.isEmpty()) {
+                    cmd.group = "General";
+                }
+                if (!cmd.name.isEmpty()) {
+                    m_commands.append(cmd);
+                    migrationNeeded = true;
+                }
+            }
+        }
     }
-    settings.endArray();
+
+    // 2. Load new format: [buttons-GroupName]
+    QStringList groups = settings.childGroups();
+    for (const QString &groupName : groups) {
+        if (groupName.startsWith("buttons-")) {
+            QString category = groupName.mid(8);  // Extract "GroupName" from "buttons-GroupName"
+            settings.beginGroup(groupName);
+
+            // Iterate through indices 1, 2, 3...
+            int i = 1;
+            while (true) {
+                QString prefix = QString::number(i) + "/";
+                if (!settings.contains(prefix + "name")) {
+                    break;
+                }
+
+                CommandDefinition cmd;
+                cmd.name = settings.value(prefix + "name").toString();
+                cmd.hexData = settings.value(prefix + "hex").toString();
+                cmd.group = category;
+
+                if (!cmd.name.isEmpty()) {
+                    // Avoid duplicates if migration and new format both exist
+                    bool duplicate = false;
+                    for (const auto &existing : m_commands) {
+                        if (existing.name == cmd.name && existing.group == cmd.group) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate) {
+                        m_commands.append(cmd);
+                    }
+                }
+                i++;
+            }
+            settings.endGroup();
+        }
+    }
 
     if (m_commands.isEmpty()) {
         CommandDefinition def;
         def.name = "Test CMD 1";
         def.hexData = "FF 00 FF";
+        def.group = "General";
         m_commands.append(def);
+        migrationNeeded = true;  // save the default one in new format
+    }
+
+    // Proactive Conversion: Save to new format immediately and clean up old
+    if (migrationNeeded) {
+        saveCommandButtons();
+        // Update version to mark migration as done
+        settings.setValue("version", UpdateChecker::currentVersion());
     }
 
     refreshCommandButtons();
+
+    // Restore tab index after tabs are populated
+    QSettings settingsRestore(QSettings::IniFormat, QSettings::UserScope, "HDGNSS", "GnssView");
+    ui->tabCommands->setCurrentIndex(settingsRestore.value("Tabs/commandsIndex", 0).toInt());
 }
 
 void MainWindow::saveCommandButtons() {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "HDGNSS", "GnssView");
     settings.setValue("columns", ui->spinCmdCols->value());
 
-    settings.beginWriteArray("buttons");
-    for (int i = 0; i < m_commands.size(); ++i) {
-        settings.setArrayIndex(i);
-        settings.setValue("name", m_commands[i].name);
-        settings.setValue("hex", m_commands[i].hexData);
-        settings.setValue("group", m_commands[i].group);
+    // 1. Remove old format array
+    settings.remove("buttons");
+
+    // 2. Cleanup existing new format groups to avoid stale entries
+    QStringList groups = settings.childGroups();
+    for (const QString &groupName : groups) {
+        if (groupName.startsWith("buttons-")) {
+            settings.remove(groupName);
+        }
     }
-    settings.endArray();
+
+    // 3. Save in new format: Grouped by category
+    QMap<QString, QList<CommandDefinition>> groupedCommands;
+    for (const auto &cmd : m_commands) {
+        groupedCommands[cmd.group].append(cmd);
+    }
+
+    for (auto it = groupedCommands.begin(); it != groupedCommands.end(); ++it) {
+        QString groupName = "buttons-" + it.key();
+        settings.beginGroup(groupName);
+
+        const QList<CommandDefinition> &list = it.value();
+        for (int i = 0; i < list.size(); ++i) {
+            QString prefix = QString::number(i + 1) + "/";
+            settings.setValue(prefix + "name", list[i].name);
+            settings.setValue(prefix + "hex", list[i].hexData);
+        }
+        settings.endGroup();
+    }
 }
 
 void MainWindow::loadSettings() {
@@ -559,7 +772,6 @@ void MainWindow::loadSettings() {
     QString currentVersion = UpdateChecker::currentVersion();
 
     if (storedVersion.isEmpty()) {
-        settings.clear();
         settings.setValue("version", currentVersion);
     }
 
@@ -604,7 +816,16 @@ void MainWindow::loadSettings() {
     // Restore tab indices
     ui->tabComms->setCurrentIndex(settings.value("Tabs/commsIndex", 0).toInt());
     ui->tabInfoData->setCurrentIndex(settings.value("Tabs/infoDataIndex", 0).toInt());
-    ui->tabCommands->setCurrentIndex(settings.value("Tabs/commandsIndex", 0).toInt());
+    // ui->tabCommands index restored in loadCommandButtons after refresh
+
+    // Restore command port checkboxes
+    ui->checkBoxSerialA->setChecked(settings.value("Command/checkBoxSerialA", false).toBool());
+    ui->checkBoxUdp->setChecked(settings.value("Command/checkBoxUdp", false).toBool());
+    ui->checkBoxTcp->setChecked(settings.value("Command/checkBoxTcp", false).toBool());
+    ui->checkBoxSerialB->setChecked(settings.value("Command/checkBoxSerialB", false).toBool());
+
+    // Binary protocol setting
+    m_binaryProtocol = settings.value("BinaryProtocol", "Auto").toString();
 }
 
 void MainWindow::saveSettings() {
@@ -639,6 +860,15 @@ void MainWindow::saveSettings() {
     settings.setValue("Tabs/commsIndex", ui->tabComms->currentIndex());
     settings.setValue("Tabs/infoDataIndex", ui->tabInfoData->currentIndex());
     settings.setValue("Tabs/commandsIndex", ui->tabCommands->currentIndex());
+
+    // Save command port checkboxes
+    settings.setValue("Command/checkBoxSerialA", ui->checkBoxSerialA->isChecked());
+    settings.setValue("Command/checkBoxUdp", ui->checkBoxUdp->isChecked());
+    settings.setValue("Command/checkBoxTcp", ui->checkBoxTcp->isChecked());
+    settings.setValue("Command/checkBoxSerialB", ui->checkBoxSerialB->isChecked());
+
+    // Binary protocol setting
+    settings.setValue("BinaryProtocol", m_binaryProtocol);
 }
 
 void MainWindow::sendNtripPosition() {

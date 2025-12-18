@@ -34,6 +34,20 @@ CommunicationManager::CommunicationManager(QObject *parent) : QObject(parent) {
     connect(m_serialB, &QSerialPort::readyRead, this, &CommunicationManager::handleSerialBReadyRead);
 
     connect(m_tcpSocket, &QTcpSocket::readyRead, this, &CommunicationManager::handleTcpReadyRead);
+    connect(m_tcpSocket, &QTcpSocket::connected, this, [this]() {
+        QString peerInfo = m_tcpSocket->peerAddress().toString();
+        if (peerInfo.isEmpty()) {
+            peerInfo = m_tcpSocket->peerName();
+        }
+        emit tcpStatusChanged(true, QString("Connected to %1:%2").arg(peerInfo).arg(m_tcpSocket->peerPort()));
+    });
+    connect(m_tcpSocket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError error) {
+        emit tcpStatusChanged(false, "TCP Error: " + m_tcpSocket->errorString());
+        emit errorOccurred("TCP: " + m_tcpSocket->errorString());
+    });
+    connect(m_tcpSocket, &QTcpSocket::disconnected, this,
+            [this]() { emit tcpStatusChanged(false, "TCP Disconnected"); });
+
     connect(m_udpSocket, &QUdpSocket::readyRead, this, &CommunicationManager::handleUdpReadyRead);
 }
 
@@ -96,18 +110,17 @@ bool CommunicationManager::isSerialConnected(int channel) const {
 
 // TCP
 bool CommunicationManager::connectTcp(const QString &host, int port) {
-    if (m_tcpSocket->isOpen()) {
-        m_tcpSocket->close();
+    if (m_tcpSocket->state() != QAbstractSocket::UnconnectedState) {
+        m_tcpSocket->abort();
     }
+
+    qDebug() << "Connecting to TCP host:" << host << ":" << port;
+    emit tcpStatusChanged(false, "Connecting...");
+
     m_tcpSocket->connectToHost(host, port);
-    if (m_tcpSocket->waitForConnected(3000)) {
-        emit tcpStatusChanged(true, QString("Connected to %1:%2").arg(host).arg(port));
-        return true;
-    } else {
-        emit tcpStatusChanged(false, "TCP Connect Failed");
-        emit errorOccurred(m_tcpSocket->errorString());
-        return false;
-    }
+
+    // We don't block anymore, let signals handle success/fail
+    return true;
 }
 
 void CommunicationManager::disconnectTcp() {

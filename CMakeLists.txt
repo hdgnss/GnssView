@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(GnssView VERSION 0.1.0 LANGUAGES CXX)
+project(GnssView VERSION 0.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,6 +27,10 @@ set(PROJECT_SOURCES
     src/core/datalogger.cpp
     src/core/updatechecker.cpp
     src/core/ntripclient.cpp
+    src/devices/rtcm3.cpp
+    src/devices/ublox.cpp
+    src/devices/allystar.cpp
+    src/devices/goldfish.cpp
     resources/resources.qrc
 )
 
@@ -56,6 +60,7 @@ target_include_directories(GnssView PRIVATE
     src
     src/core
     src/ui
+    src/devices
 )
 
 target_link_libraries(GnssView PRIVATE

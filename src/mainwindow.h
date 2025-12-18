@@ -35,6 +35,9 @@ class CommunicationManager;
 class NmeaParser;
 class DataLogger;
 class UpdateChecker;
+class UbloxDecoder;
+class AllystarDecoder;
+class GoldfishDecoder;
 
 #include <QBarCategoryAxis>
 #include <QBarSeries>
@@ -86,6 +89,12 @@ private:
     UpdateChecker *m_updateChecker;
     NTRIPClient *m_ntripClient;
 
+    // Binary protocol decoders
+    UbloxDecoder *m_ubloxDecoder;
+    AllystarDecoder *m_allystarDecoder;
+    GoldfishDecoder *m_goldfishDecoder;
+    QString m_binaryProtocol;  // "None", "UBX", "ALLYSTAR", "GOLDFISH", "Auto"
+
     // Chart-related members
     QChart *m_snrL1Chart;
     QChart *m_snrL5Chart;
@@ -98,6 +107,11 @@ private:
     void sendToSelectedPorts(const QByteArray &data);
     void processRawData(const QByteArray &data, const QString &source);
     void processBufferedData(const QString &source);
+
+    // Binary protocol helpers
+    bool tryProcessBinaryPacket(QByteArray &buffer, const QString &source);
+    void displayBinaryPacket(const QString &source, const QString &protocol, const QString &msgName, int length,
+                             const QByteArray &payload = QByteArray());
 
     // Chart helpers
     void setupSnrChart(QChart *&chart, QChartView *chartView);

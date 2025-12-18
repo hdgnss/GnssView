@@ -3,7 +3,7 @@ name: Macintosh
 on:
   push:
     tags:
-      - VM*
+      - V*
   pull_request:
     branches: [ master ]
 
@@ -32,6 +32,7 @@ jobs:
       uses: jurplel/install-qt-action@v4
       with:
         version: 6.8.0
+        modules: 'qtcharts qtserialport'
         cached: 'false'
 
     - name: Checkout
@@ -42,6 +43,12 @@ jobs:
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{ env.BUILD_TYPE }}
+
+    - name: Package
+      run: macdeployqt build/{{ env.TARGET_NAME }}.app -always-overwrite
+
+    - name: Dmg
+      run: create-dmg --volname {{ env.TARGET_NAME }} --volicon "./resources/icon.icns" --background "./resources/background.png" --window-pos 200 120 --window-size 1000 600 --icon-size 128 --icon {{ env.TARGET_NAME }}.app 230 295 --hide-extension {{ env.TARGET_NAME }}.app --app-drop-link 750 295 ./build/{{ env.TARGET_NAME }}.dmg ./build/{{ env.TARGET_NAME }}.app
 
     - name: Release
       if: startsWith(github.event.ref, 'refs/tags/')
