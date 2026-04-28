@@ -138,7 +138,35 @@ jobs:
               exit 1
             fi
             echo "app_path=${apps[0]}" >> "$GITHUB_OUTPUT"
+            package_root="$(dirname "${apps[0]}")"
+            echo "package_root=$package_root" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Sign packaged app and rebuild DMG
+        if: startsWith(github.ref, 'refs/tags/') && steps.signing.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+
+          app="${{ steps.package.outputs.app_path }}"
+          package_root="${{ steps.package.outputs.package_root }}"
+          dmg="${{ steps.package.outputs.path }}"
+
+          codesign \
+            --force \
+            --deep \
+            --options runtime \
+            --timestamp \
+            --sign "${{ steps.signing.outputs.identity }}" \
+            "$app"
+
+          codesign --verify --deep --strict --verbose=4 "$app"
+          rm -f "$dmg"
+          hdiutil create \
+            -volname "GnssView" \
+            -srcfolder "$package_root" \
+            -format UDZO \
+            -ov \
+            "$dmg"
 
       - name: Validate app signature
         if: startsWith(github.ref, 'refs/tags/') && steps.signing.outputs.enabled == 'true'
