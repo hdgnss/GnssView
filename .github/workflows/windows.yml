@@ -1,0 +1,117 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - "v*"
+      - "V*"
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: write
+
+env:
+  BUILD_TYPE: Release
+  QT_VERSION: 6.8.0
+
+jobs:
+  build:
+    name: Build and package Windows
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtserialport
+          cache: true
+
+      - name: Resolve Qt paths
+        id: qt
+        shell: pwsh
+        run: |
+          if (-not $env:Qt6_DIR) {
+            throw "Qt6_DIR was not set by install-qt-action."
+          }
+
+          $qtPath = (Resolve-Path $env:Qt6_DIR).Path
+          $qtConfigAtPath = Join-Path $qtPath "Qt6Config.cmake"
+          $qtConfigBelowRoot = Join-Path $qtPath "lib\cmake\Qt6\Qt6Config.cmake"
+
+          if (Test-Path $qtConfigAtPath) {
+            $qtCmakeDir = $qtPath
+            $qtRoot = (Resolve-Path (Join-Path $qtCmakeDir "..\..\..")).Path
+          } elseif (Test-Path $qtConfigBelowRoot) {
+            $qtRoot = $qtPath
+            $qtCmakeDir = Join-Path $qtRoot "lib\cmake\Qt6"
+          } else {
+            throw "Unable to locate Qt6Config.cmake from Qt6_DIR=$qtPath"
+          }
+
+          "qt_cmake_dir=$qtCmakeDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "qt_root=$qtRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -DQt6_DIR="${{ steps.qt.outputs.qt_cmake_dir }}"
+
+      - name: Build regression tests
+        shell: pwsh
+        run: cmake --build build --config $env:BUILD_TYPE --target GnssViewRegression
+
+      - name: Run regression tests
+        shell: pwsh
+        run: .\build\$env:BUILD_TYPE\GnssViewRegression.exe
+
+      - name: Build app
+        shell: pwsh
+        run: cmake --build build --config $env:BUILD_TYPE --target GnssView
+
+      - name: Build installer
+        id: package
+        shell: pwsh
+        run: |
+          .\scripts\build_windows_installer.ps1 `
+            -Configuration $env:BUILD_TYPE `
+            -BuildDir "$PWD\build" `
+            -QtRoot "${{ steps.qt.outputs.qt_root }}"
+          $installer = Get-ChildItem -Path "build\installer\output" -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "Installer was not created"
+          }
+          "installer=$($installer.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GnssView-Windows
+          path: ${{ steps.package.outputs.installer }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $asset = "${{ steps.package.outputs.installer }}"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title $tag --notes "Automated GnssView release."
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Release may already exist; continuing to upload asset."
+            }
+          }
+          gh release upload $tag $asset --clobber
