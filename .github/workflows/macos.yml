@@ -87,9 +87,6 @@ jobs:
             -G Ninja
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
           )
-          if [[ "${{ steps.signing.outputs.enabled }}" == "true" ]]; then
-            args+=("-DHDGNSS_MACOS_SIGNING_IDENTITY=${{ steps.signing.outputs.identity }}")
-          fi
           cmake "${args[@]}"
 
       - name: Build regression tests

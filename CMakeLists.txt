@@ -35,8 +35,6 @@ endif()
 option(HDGNSS_ENABLE_FTDI "Enable FTDI D2XX/libMPSSE SPI integration" ON)
 set(HDGNSS_BUNDLE_IDENTIFIER "net.hdgnss.GnssView" CACHE STRING
     "macOS bundle identifier for GnssView")
-set(HDGNSS_MACOS_SIGNING_IDENTITY "" CACHE STRING
-    "Developer ID Application signing identity used by macdeployqt on macOS")
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC OFF)
@@ -343,11 +341,6 @@ if(APPLE)
     set(HDGNSS_MACDEPLOYQT_OPTIONS
         "-qmldir=${CMAKE_CURRENT_SOURCE_DIR}/src/ui/qml"
     )
-    if(HDGNSS_MACOS_SIGNING_IDENTITY)
-        list(APPEND HDGNSS_MACDEPLOYQT_OPTIONS
-            "-sign-for-notarization=${HDGNSS_MACOS_SIGNING_IDENTITY}"
-        )
-    endif()
 
     install(TARGETS GnssView
         BUNDLE DESTINATION .
