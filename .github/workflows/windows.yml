@@ -37,11 +37,15 @@ jobs:
         id: qt
         shell: pwsh
         run: |
-          if (-not $env:Qt6_DIR) {
-            throw "Qt6_DIR was not set by install-qt-action."
+          $qtInput = $env:Qt6_DIR
+          if ([string]::IsNullOrWhiteSpace($qtInput)) {
+            $qtInput = $env:QT_ROOT_DIR
+          }
+          if ([string]::IsNullOrWhiteSpace($qtInput)) {
+            throw "Neither Qt6_DIR nor QT_ROOT_DIR was set by install-qt-action."
           }
 
-          $qtPath = (Resolve-Path $env:Qt6_DIR).Path
+          $qtPath = (Resolve-Path $qtInput).Path
           $qtConfigAtPath = Join-Path $qtPath "Qt6Config.cmake"
           $qtConfigBelowRoot = Join-Path $qtPath "lib\cmake\Qt6\Qt6Config.cmake"
 
@@ -52,7 +56,7 @@ jobs:
             $qtRoot = $qtPath
             $qtCmakeDir = Join-Path $qtRoot "lib\cmake\Qt6"
           } else {
-            throw "Unable to locate Qt6Config.cmake from Qt6_DIR=$qtPath"
+            throw "Unable to locate Qt6Config.cmake from Qt path: $qtPath"
           }
 
           "qt_cmake_dir=$qtCmakeDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
