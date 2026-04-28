@@ -54,11 +54,14 @@ jobs:
           keychain_password="${KEYCHAIN_PASSWORD:-$(uuidgen)}"
           keychain_path="$RUNNER_TEMP/gnssview-signing.keychain-db"
           certificate_path="$RUNNER_TEMP/gnssview-signing.p12"
+          developer_id_g2_path="$RUNNER_TEMP/DeveloperIDG2CA.cer"
 
           printf '%s' "$MACOS_CERTIFICATE" | base64 -D > "$certificate_path"
+          curl -fsSLo "$developer_id_g2_path" "https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer"
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security add-certificates -k "$keychain_path" "$developer_id_g2_path"
           security import "$certificate_path" -k "$keychain_path" -P "$MACOS_CERTIFICATE_PASSWORD" -A -f pkcs12
           security list-keychains -d user -s "$keychain_path"
           security default-keychain -s "$keychain_path"
@@ -72,7 +75,7 @@ jobs:
           fi
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "identity=$identity_hash" >> "$GITHUB_OUTPUT"
-          rm -f "$certificate_path"
+          rm -f "$certificate_path" "$developer_id_g2_path"
 
       - name: Configure
         run: |
@@ -192,7 +195,7 @@ jobs:
           set -euo pipefail
 
           security delete-keychain "$RUNNER_TEMP/gnssview-signing.keychain-db" || true
-          rm -f "$RUNNER_TEMP/gnssview-signing.p12"
+          rm -f "$RUNNER_TEMP/gnssview-signing.p12" "$RUNNER_TEMP/DeveloperIDG2CA.cer"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

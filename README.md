@@ -93,6 +93,12 @@ To set up macOS release signing:
    security find-identity -v -p codesigning
    ```
 
+   If Keychain Access shows the Developer ID certificate as not trusted, install
+   Apple's current Developer ID intermediate certificate from the
+   [Apple PKI page](https://www.apple.com/certificateauthority/). The CI
+   workflow imports the Developer ID G2 intermediate automatically before
+   signing.
+
 6. Create an Apple ID app-specific password and add these notarization secrets:
    `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD`.
 7. Push a version tag such as `v0.1.0`. The macOS workflow signs the packaged
