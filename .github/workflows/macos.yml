@@ -151,6 +151,7 @@ jobs:
           codesign \
             --force \
             --deep \
+            --entitlements packaging/macos/GnssView.entitlements \
             --options runtime \
             --timestamp \
             --sign "${{ steps.signing.outputs.identity }}" \
@@ -185,6 +186,13 @@ jobs:
           fi
           if ! grep -q 'Authority=Developer ID Application' <<< "$signature"; then
             echo "GnssView.app is not signed with a Developer ID Application identity." >&2
+            exit 1
+          fi
+
+          entitlements="$(codesign -d --entitlements :- "$app" 2>/dev/null)"
+          printf '%s\n' "$entitlements"
+          if ! grep -q 'com.apple.security.cs.disable-library-validation' <<< "$entitlements"; then
+            echo "GnssView.app is missing the plugin-loading entitlement." >&2
             exit 1
           fi
 
