@@ -138,4 +138,8 @@ if (-not (Test-Path $outputExe)) {
     throw "Installer was not created: $outputExe"
 }
 
+if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_OUTPUT)) {
+    "installer=$outputExe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+}
+
 Write-Host "Installer created: $outputExe"

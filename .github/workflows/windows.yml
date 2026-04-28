@@ -79,12 +79,17 @@ jobs:
         id: regression
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path build -Recurse -Filter "GnssViewRegression.exe" |
-            Where-Object { $_.FullName -notmatch "\\CMakeFiles\\" } |
-            Select-Object -First 1
-          if (-not $exe) {
+          $matches = @(
+            Get-ChildItem -Path build -Recurse -Filter "GnssViewRegression.exe" |
+              Where-Object { $_.FullName -notmatch "\\CMakeFiles\\" }
+          )
+          if ($matches.Count -eq 0) {
             throw "GnssViewRegression.exe was not found under build"
           }
+          if ($matches.Count -gt 1) {
+            throw "Multiple GnssViewRegression.exe files found:`n$($matches.FullName -join "`n")"
+          }
+          $exe = $matches[0]
           "exe=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Run regression tests
@@ -104,11 +109,6 @@ jobs:
             -Configuration $env:BUILD_TYPE `
             -BuildDir "$PWD\build" `
             -QtRoot "${{ steps.qt.outputs.qt_root }}"
-          $installer = Get-ChildItem -Path "build\installer\output" -Filter "*.exe" | Select-Object -First 1
-          if (-not $installer) {
-            throw "Installer was not created"
-          }
-          "installer=$($installer.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
