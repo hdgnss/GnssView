@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GnssView
+Comment=Desktop GNSS client
+Exec=GnssView
+Icon=GnssView
+Terminal=false
+Categories=Science;Geoscience;

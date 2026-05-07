@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.hdgnss.GnssView</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-Proprietary</project_license>
+  <name>GnssView</name>
+  <summary>Desktop GNSS client</summary>
+  <developer id="com.hdgnss">
+    <name>HDGNSS</name>
+  </developer>
+  <description>
+    <p>GnssView is a Qt desktop client for working with GNSS streams, recorded logs, satellite views, signal panels, and transport connections.</p>
+  </description>
+  <url type="homepage">https://github.com/hdgnss/GnssView</url>
+  <launchable type="desktop-id">com.hdgnss.GnssView.desktop</launchable>
+  <content_rating type="oars-1.1" />
+</component>

@@ -1,0 +1,1 @@
+GnssView is a Qt desktop client for working with GNSS streams, logs, and views.

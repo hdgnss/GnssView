@@ -1,0 +1,186 @@
+name: Linux Packages
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - "v*"
+      - "V*"
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: write
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  deb:
+    name: Build DEB package
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+
+    steps:
+      - name: Install git
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates git
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Trust GitHub workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y \
+            appstream \
+            cmake \
+            desktop-file-utils \
+            dpkg-dev \
+            file \
+            g++ \
+            gh \
+            libgl1-mesa-dev \
+            ninja-build \
+            qt6-base-dev \
+            qt6-declarative-dev \
+            qt6-serialport-dev
+
+      - name: Validate desktop metadata
+        run: |
+          desktop-file-validate packaging/linux/com.hdgnss.GnssView.desktop
+          appstreamcli validate --no-net packaging/linux/com.hdgnss.GnssView.metainfo.xml
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+
+      - name: Build regression tests
+        run: cmake --build build --target GnssViewRegression
+
+      - name: Run regression tests
+        run: ./build/GnssViewRegression
+
+      - name: Build app
+        run: cmake --build build --target GnssView
+
+      - name: Build DEB
+        id: package
+        working-directory: build
+        run: |
+          set -eu
+
+          cpack -G DEB
+          packages=$(find . -maxdepth 1 -type f -name '*.deb' | sort)
+          package_count=$(printf '%s\n' "$packages" | sed '/^$/d' | wc -l | tr -d ' ')
+          if [ "$package_count" -ne 1 ]; then
+            printf 'Expected one DEB package, found %s:\n%s\n' "$package_count" "$packages" >&2
+            exit 1
+          fi
+          package=${packages#./}
+          echo "path=build/$package" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GnssView-DEB
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          asset="${{ steps.package.outputs.path }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes "Automated GnssView release." || true
+          fi
+          gh release upload "$tag" "$asset" --clobber
+
+  rpm:
+    name: Build RPM package
+    runs-on: ubuntu-latest
+    container: fedora:44
+
+    steps:
+      - name: Install git
+        run: dnf install -y git
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Trust GitHub workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install build tools
+        run: |
+          dnf install -y \
+            appstream \
+            cmake \
+            desktop-file-utils \
+            gcc-c++ \
+            gh \
+            ninja-build \
+            rpm-build \
+            qt6-qtbase-devel \
+            qt6-qtdeclarative-devel \
+            qt6-qtserialport-devel
+
+      - name: Validate desktop metadata
+        run: |
+          desktop-file-validate packaging/linux/com.hdgnss.GnssView.desktop
+          appstreamcli validate --no-net packaging/linux/com.hdgnss.GnssView.metainfo.xml
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+
+      - name: Build regression tests
+        run: cmake --build build --target GnssViewRegression
+
+      - name: Run regression tests
+        run: ./build/GnssViewRegression
+
+      - name: Build app
+        run: cmake --build build --target GnssView
+
+      - name: Build RPM
+        id: package
+        working-directory: build
+        run: |
+          set -eu
+
+          cpack -G RPM
+          packages=$(find . -maxdepth 1 -type f -name '*.rpm' | sort)
+          package_count=$(printf '%s\n' "$packages" | sed '/^$/d' | wc -l | tr -d ' ')
+          if [ "$package_count" -ne 1 ]; then
+            printf 'Expected one RPM package, found %s:\n%s\n' "$package_count" "$packages" >&2
+            exit 1
+          fi
+          package=${packages#./}
+          echo "path=build/$package" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GnssView-RPM
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          asset="${{ steps.package.outputs.path }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes "Automated GnssView release." || true
+          fi
+          gh release upload "$tag" "$asset" --clobber

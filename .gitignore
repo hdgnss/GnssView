@@ -1,0 +1,38 @@
+.DS_Store
+
+# CMake / Ninja
+build*/
+CMakeUserPresets.json
+compile_commands.json
+
+# Qt generated
+.qt/
+.rcc/
+qmlcache/
+*_autogen/
+*.qmlc
+*.jsc
+*.metatypes.json
+meta_types/
+GnssView/
+!include/hdgnss/
+!include/hdgnss/*.h
+
+# Runtime outputs
+runtime-data/
+*.raw.bin
+*.jsonl
+
+# IDE / Cache
+.cache/
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+*.swp
+*.swo
+
+# macOS/Linux misc
+*.dSYM/
