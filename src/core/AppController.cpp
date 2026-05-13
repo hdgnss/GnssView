@@ -25,6 +25,9 @@ namespace hdgnss {
 
 namespace {
 
+constexpr int kMaxControllerSatellites = 512;
+constexpr qint64 kSatelliteRetentionMs = 30 * 1000;
+
 QVariantMap protocolPluginDescriptor(QObject *pluginObject, AppSettings *settings) {
     QVariantMap descriptor;
     if (!pluginObject) {
@@ -745,6 +748,7 @@ void AppController::resetAllStreamState(bool clearUi) {
 void AppController::clearUiState() {
     m_location = GnssLocation{};
     m_satellites.clear();
+    m_satelliteLastSeenMs.clear();
     m_rawLogModel.clear();
     m_satelliteModel.setSatellites({});
     m_signalModel.setSatellites({});
@@ -1242,17 +1246,18 @@ void AppController::handleIncomingBytes(const QString &transportName, const QByt
 void AppController::applyProtocolMessage(const ProtocolMessage &message) {
     const QVariantMap fields = message.fields;
     auto assignDouble = [&fields](const QString &key, double &target) {
-        if (fields.contains(key)) {
-            target = fields.value(key).toDouble();
+        const auto it = fields.constFind(key);
+        if (it != fields.cend()) {
+            target = it.value().toDouble();
         }
     };
     bool protocolInfoChanged = false;
 
-    if (fields.contains(QStringLiteral("validFix"))) {
-        m_location.validFix = fields.value(QStringLiteral("validFix")).toBool();
+    if (const auto it = fields.constFind(QStringLiteral("validFix")); it != fields.cend()) {
+        m_location.validFix = it.value().toBool();
     }
-    if (fields.contains(QStringLiteral("fixType"))) {
-        const QVariant value = fields.value(QStringLiteral("fixType"));
+    if (const auto it = fields.constFind(QStringLiteral("fixType")); it != fields.cend()) {
+        const QVariant value = it.value();
         m_location.fixType = value.typeId() == QMetaType::Int
             ? QStringLiteral("Fix %1").arg(value.toInt())
             : value.toString();
@@ -1260,7 +1265,7 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
     if (isLocationQualityMessage(message)) {
         m_location.quality = fields.value(QStringLiteral("quality")).toInt();
     }
-    if (fields.contains(QStringLiteral("utcTime"))) {
+    if (fields.constFind(QStringLiteral("utcTime")) != fields.cend()) {
         m_location.utcTime = locationUtcTime(message, m_location.utcTime);
     }
     assignDouble(QStringLiteral("latitude"), m_location.latitude);
@@ -1279,20 +1284,21 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
     assignDouble(QStringLiteral("longitudeSigma"), m_location.longitudeSigma);
     assignDouble(QStringLiteral("altitudeSigma"), m_location.altitudeSigma);
 
-    if (fields.contains(QStringLiteral("satellitesUsed"))) {
-        m_location.satellitesUsed = fields.value(QStringLiteral("satellitesUsed")).toInt();
+    if (const auto it = fields.constFind(QStringLiteral("satellitesUsed")); it != fields.cend()) {
+        m_location.satellitesUsed = it.value().toInt();
     }
-    if (fields.contains(QStringLiteral("satellitesInView"))) {
-        m_location.satellitesInView = fields.value(QStringLiteral("satellitesInView")).toInt();
+    if (const auto it = fields.constFind(QStringLiteral("satellitesInView")); it != fields.cend()) {
+        m_location.satellitesInView = it.value().toInt();
     }
-    if (fields.contains(QStringLiteral("mode"))) {
-        m_location.mode = fields.value(QStringLiteral("mode")).toString();
+    if (const auto it = fields.constFind(QStringLiteral("mode")); it != fields.cend()) {
+        m_location.mode = it.value().toString();
     }
-    if (fields.contains(QStringLiteral("status"))) {
-        m_location.status = fields.value(QStringLiteral("status")).toString();
+    if (const auto it = fields.constFind(QStringLiteral("status")); it != fields.cend()) {
+        m_location.status = it.value().toString();
     }
-    if (fields.contains(QStringLiteral("satellites"))) {
-        const QVariantList sats = fields.value(QStringLiteral("satellites")).toList();
+    if (const auto it = fields.constFind(QStringLiteral("satellites")); it != fields.cend()) {
+        const QVariantList sats = it.value().toList();
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         for (const QVariant &value : sats) {
             const QVariantMap satMap = value.toMap();
             SatelliteInfo sat;
@@ -1311,12 +1317,17 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
             sat.cn0 = satMap.value(QStringLiteral("cn0")).toInt();
             sat.usedInFix = satMap.value(QStringLiteral("usedInFix")).toBool();
             m_satellites.insert(sat.key, sat);
+            m_satelliteLastSeenMs.insert(sat.key, nowMs);
         }
+        pruneSatelliteCache(nowMs);
         m_satellitesDirty = true;
     }
 
+    const auto panelTargetIt = fields.constFind(QStringLiteral("infoPanelId"));
+    const QString panelTargetId = panelTargetIt == fields.cend()
+        ? QString()
+        : panelTargetIt.value().toString();
     for (ProtocolInfoPanelState &panel : m_protocolInfoPanels) {
-        const QString panelTargetId = fields.value(QStringLiteral("infoPanelId")).toString();
         if (!panelTargetId.isEmpty() && panel.definition.id != panelTargetId) {
             continue;
         }
@@ -1325,30 +1336,26 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
             && panel.definition.protocol != message.protocol) {
             continue;
         }
-        int matchedFieldCount = 0;
-        for (const ProtocolInfoField &field : panel.definition.fields) {
-            if (fields.contains(field.valueKey)) {
-                ++matchedFieldCount;
-            }
-        }
-        if (matchedFieldCount == 0) {
-            continue;
-        }
-
+        bool matchedAnyField = false;
         bool panelChanged = false;
-        if (panel.definition.replaceOnMessage && !panel.values.isEmpty()) {
-            panel.values.clear();
-            panelChanged = true;
-        }
         for (const ProtocolInfoField &field : panel.definition.fields) {
-            if (!fields.contains(field.valueKey)) {
+            const auto valueIt = fields.constFind(field.valueKey);
+            if (valueIt == fields.cend()) {
                 continue;
             }
-            const QVariant newValue = fields.value(field.valueKey);
+            if (!matchedAnyField && panel.definition.replaceOnMessage && !panel.values.isEmpty()) {
+                panel.values.clear();
+                panelChanged = true;
+            }
+            matchedAnyField = true;
+            const QVariant newValue = valueIt.value();
             if (panel.values.value(field.id) != newValue) {
                 panel.values.insert(field.id, newValue);
                 panelChanged = true;
             }
+        }
+        if (!matchedAnyField) {
+            continue;
         }
         protocolInfoChanged = protocolInfoChanged || panelChanged;
     }
@@ -1388,6 +1395,29 @@ void AppController::recordDeviationSample(const ProtocolMessage &message) {
     m_deviationMapModel.addSample(m_location.latitude, m_location.longitude);
     m_lastDeviationSampleUtcTime = sampleUtcTime;
     m_lastDeviationSamplePriority = priority;
+}
+
+void AppController::pruneSatelliteCache(qint64 nowMs) {
+    for (auto it = m_satelliteLastSeenMs.begin(); it != m_satelliteLastSeenMs.end();) {
+        if ((nowMs - it.value()) > kSatelliteRetentionMs) {
+            m_satellites.remove(it.key());
+            it = m_satelliteLastSeenMs.erase(it);
+            continue;
+        }
+        ++it;
+    }
+
+    while (m_satellites.size() > kMaxControllerSatellites && !m_satelliteLastSeenMs.isEmpty()) {
+        auto oldestIt = m_satelliteLastSeenMs.cbegin();
+        for (auto it = m_satelliteLastSeenMs.cbegin(); it != m_satelliteLastSeenMs.cend(); ++it) {
+            if (it.value() < oldestIt.value()) {
+                oldestIt = it;
+            }
+        }
+        const QString oldestKey = oldestIt.key();
+        m_satelliteLastSeenMs.remove(oldestKey);
+        m_satellites.remove(oldestKey);
+    }
 }
 
 void AppController::scheduleUiRefresh() {

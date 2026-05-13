@@ -227,6 +227,7 @@ private:
     void handleIncomingBytes(const QString &transportName, const QByteArray &bytes, DataDirection direction);
     void applyProtocolMessage(const ProtocolMessage &message);
     void recordDeviationSample(const ProtocolMessage &message);
+    void pruneSatelliteCache(qint64 nowMs);
     void scheduleUiRefresh();
     void flushUiRefresh();
     void refreshSatellites();
@@ -262,6 +263,7 @@ private:
     QHash<QString, QVariantMap> m_protocolBuildMessageDefinitions;
     GnssLocation m_location;
     QHash<QString, SatelliteInfo> m_satellites;
+    QHash<QString, qint64> m_satelliteLastSeenMs;
     QHash<QString, StreamCounters> m_streamCounters;
     QList<StreamChunker::BinaryFramer> m_binaryFramers;
     QHash<QString, StreamChunker> m_streamBuffers;

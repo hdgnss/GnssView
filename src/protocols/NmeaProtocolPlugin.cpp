@@ -3,12 +3,16 @@
 #include <cmath>
 #include <limits>
 #include <QDate>
+#include <QDateTime>
 #include <QRegularExpression>
 #include <QTimeZone>
 
 namespace hdgnss {
 
 namespace {
+
+constexpr int kMaxBufferedNmeaBytes = 512 * 1024;
+constexpr qint64 kSatelliteRetentionMs = 30 * 1000;
 
 double parseOptionalDouble(const QByteArray &field) {
     if (field.isEmpty()) {
@@ -224,10 +228,16 @@ QList<ProtocolMessage> NmeaProtocolPlugin::feed(const QByteArray &bytes) {
                 m_buffer.remove(0, nextStart);
                 continue;
             }
+            if (m_buffer.size() > kMaxBufferedNmeaBytes) {
+                m_buffer.clear();
+            }
             break;
         }
 
         if (star + 2 >= m_buffer.size()) {
+            if (m_buffer.size() > kMaxBufferedNmeaBytes) {
+                m_buffer.clear();
+            }
             break;
         }
 
@@ -293,6 +303,7 @@ bool NmeaProtocolPlugin::validateChecksum(const QByteArray &sentence) {
 void NmeaProtocolPlugin::resetState() {
     m_buffer.clear();
     m_satellites.clear();
+    m_satelliteLastSeenMs.clear();
     m_usedSatelliteIdsByConstellation.clear();
     m_seenGsvSignalsByConstellation.clear();
     m_updatedGsaSignalsByConstellation.clear();
@@ -496,12 +507,15 @@ QList<ProtocolMessage> NmeaProtocolPlugin::parseSentence(const QByteArray &sente
                 const bool sameConstellation = talkerConstellation == QStringLiteral("GNSS")
                     || it->constellation == talkerConstellation;
                 if (sameSignal && sameConstellation) {
+                    const QString removedKey = it.key();
                     it = m_satellites.erase(it);
+                    m_satelliteLastSeenMs.remove(removedKey);
                     continue;
                 }
                 ++it;
             }
         }
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         for (int base = 4; base + 3 < rawFields.size(); base += 4) {
             const int rawSvid = rawFields.value(base).toInt();
             if (rawSvid <= 0) {
@@ -522,7 +536,9 @@ QList<ProtocolMessage> NmeaProtocolPlugin::parseSentence(const QByteArray &sente
                 .arg(sat.signalId)
                 .arg(sat.svid);
             m_satellites.insert(sat.key, sat);
+            m_satelliteLastSeenMs.insert(sat.key, nowMs);
         }
+        pruneSatelliteCache(nowMs);
         message.fields = {
             {QStringLiteral("satellites"), satelliteVariantList()},
             {QStringLiteral("satellitesInView"), rawFields.value(3).toInt()}
@@ -685,6 +701,29 @@ bool NmeaProtocolPlugin::isSatelliteUsed(const QString &constellation, const QSt
         return m_usedSatelliteIdsByConstellation.value(usedKey(constellation, 0)).contains(svid);
     }
     return false;
+}
+
+void NmeaProtocolPlugin::pruneSatelliteCache(qint64 nowMs) {
+    for (auto it = m_satelliteLastSeenMs.begin(); it != m_satelliteLastSeenMs.end();) {
+        if ((nowMs - it.value()) > kSatelliteRetentionMs) {
+            m_satellites.remove(it.key());
+            it = m_satelliteLastSeenMs.erase(it);
+            continue;
+        }
+        ++it;
+    }
+
+    while (m_satellites.size() > kMaxCachedSatellites && !m_satelliteLastSeenMs.isEmpty()) {
+        auto oldestIt = m_satelliteLastSeenMs.cbegin();
+        for (auto it = m_satelliteLastSeenMs.cbegin(); it != m_satelliteLastSeenMs.cend(); ++it) {
+            if (it.value() < oldestIt.value()) {
+                oldestIt = it;
+            }
+        }
+        const QString oldestKey = oldestIt.key();
+        m_satelliteLastSeenMs.remove(oldestKey);
+        m_satellites.remove(oldestKey);
+    }
 }
 
 QVariantList NmeaProtocolPlugin::satelliteVariantList() const {

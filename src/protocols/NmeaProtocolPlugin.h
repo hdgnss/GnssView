@@ -9,6 +9,8 @@ namespace hdgnss {
 
 class NmeaProtocolPlugin : public IProtocolPlugin {
 public:
+    static constexpr int kMaxCachedSatellites = 256;
+
     NmeaProtocolPlugin() = default;
 
     QString protocolName() const override;
@@ -37,12 +39,14 @@ private:
     static QString fixTypeName(int quality);
     void updateUsedSatellites(const QString &constellation, const QString &band, int signalId, const QSet<int> &svids);
     bool isSatelliteUsed(const QString &constellation, const QString &band, int signalId, int svid) const;
+    void pruneSatelliteCache(qint64 nowMs);
     QVariantList satelliteVariantList() const;
     static QString signalKey(int signalId);
     static QString usedKey(const QString &constellation, int signalId);
 
     QByteArray m_buffer;
     QHash<QString, SatelliteInfo> m_satellites;
+    QHash<QString, qint64> m_satelliteLastSeenMs;
     QHash<QString, QSet<int>> m_usedSatelliteIdsByConstellation;
     QHash<QString, QSet<QString>> m_seenGsvSignalsByConstellation;
     QHash<QString, QSet<QString>> m_updatedGsaSignalsByConstellation;

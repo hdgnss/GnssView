@@ -176,10 +176,23 @@ void RawLogModel::appendProtocolMessage(const QDateTime &timestampUtc,
 }
 
 void RawLogModel::appendDisplayEntry(const DisplayEntry &entry) {
+  trimEntriesForAppend();
   const int row = m_entries.size();
   beginInsertRows({}, row, row);
   m_entries.append(entry);
   endInsertRows();
+}
+
+void RawLogModel::trimEntriesForAppend() {
+  if (m_entries.size() < kMaxEntries) {
+    return;
+  }
+
+  const int removeCount =
+      qMin(m_entries.size(), m_entries.size() - kMaxEntries + kTrimBatchSize);
+  beginRemoveRows({}, 0, removeCount - 1);
+  m_entries.remove(0, removeCount);
+  endRemoveRows();
 }
 
 } // namespace hdgnss

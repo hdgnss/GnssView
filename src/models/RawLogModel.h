@@ -13,6 +13,8 @@ class RawLogModel : public QAbstractListModel {
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
+    static constexpr int kMaxEntries = 10000;
+
     enum Roles {
         TimestampRole = Qt::UserRole + 1,
         DirectionRole,
@@ -49,6 +51,8 @@ signals:
     void countChanged();
 
 private:
+    static constexpr int kTrimBatchSize = 1000;
+
     struct DisplayEntry {
         QDateTime timestampUtc;
         DataDirection direction = DataDirection::Rx;
@@ -60,6 +64,7 @@ private:
     };
 
     void appendDisplayEntry(const DisplayEntry &entry);
+    void trimEntriesForAppend();
 
     QList<DisplayEntry> m_entries;
     QHash<QString, StreamChunker> m_pendingBuffers;

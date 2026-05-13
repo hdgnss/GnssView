@@ -9,6 +9,9 @@ namespace hdgnss {
 
 namespace {
 
+constexpr int kFlushIntervalMs = 1000;
+constexpr qint64 kFlushByteThreshold = 256 * 1024;
+
 QString directionName(DataDirection direction) {
     return direction == DataDirection::Rx ? QStringLiteral("RX") : QStringLiteral("TX");
 }
@@ -25,6 +28,9 @@ QString stripTrailingLineEndings(const QByteArray &payload) {
 
 RawRecorder::RawRecorder(QObject *parent)
     : QObject(parent) {
+    m_flushTimer.setSingleShot(true);
+    m_flushTimer.setInterval(kFlushIntervalMs);
+    connect(&m_flushTimer, &QTimer::timeout, this, &RawRecorder::flush);
 }
 
 RawRecorder::~RawRecorder() {
@@ -74,10 +80,16 @@ void RawRecorder::setLogRootDirectory(const QString &directory) {
 }
 
 void RawRecorder::setRecordRawEnabled(bool enabled) {
+    if (!enabled) {
+        flush();
+    }
     m_recordRawEnabled = enabled;
 }
 
 void RawRecorder::setRecordDecodeEnabled(bool enabled) {
+    if (!enabled) {
+        flush();
+    }
     m_recordDecodeEnabled = enabled;
 }
 
@@ -95,6 +107,7 @@ QString RawRecorder::sanitizeFilePart(const QString &value) const {
 }
 
 void RawRecorder::closeFiles() {
+    flush();
     if (m_binaryFile.isOpen()) {
         m_binaryFile.close();
     }
@@ -162,8 +175,32 @@ void RawRecorder::writeLogEntry(const QDateTime &timestampUtc,
                                   directionName(direction),
                                   format,
                                   data);
-    m_logFile.write(line.toUtf8());
+    const QByteArray lineBytes = line.toUtf8();
+    const qint64 written = m_logFile.write(lineBytes);
+    if (written > 0) {
+        m_pendingLogFlushBytes += written;
+    }
     ++m_entriesRecorded;
+}
+
+void RawRecorder::scheduleFlush() {
+    if (!m_flushTimer.isActive()) {
+        m_flushTimer.start();
+    }
+}
+
+void RawRecorder::flush() {
+    if (m_flushTimer.isActive()) {
+        m_flushTimer.stop();
+    }
+    if (m_pendingBinaryFlushBytes > 0 && m_binaryFile.isOpen()) {
+        m_binaryFile.flush();
+    }
+    if (m_pendingLogFlushBytes > 0 && m_logFile.isOpen()) {
+        m_logFile.flush();
+    }
+    m_pendingBinaryFlushBytes = 0;
+    m_pendingLogFlushBytes = 0;
 }
 
 void RawRecorder::recordRaw(const RawLogEntry &entry) {
@@ -178,8 +215,13 @@ void RawRecorder::recordRaw(const RawLogEntry &entry) {
     const qint64 written = m_binaryFile.write(entry.payload);
     if (written > 0) {
         m_bytesRecorded += written;
+        m_pendingBinaryFlushBytes += written;
+        if (m_pendingBinaryFlushBytes >= kFlushByteThreshold) {
+            flush();
+        } else {
+            scheduleFlush();
+        }
     }
-    m_binaryFile.flush();
 }
 
 void RawRecorder::recordChunk(const QDateTime &timestampUtc,
@@ -213,7 +255,11 @@ void RawRecorder::recordChunk(const QDateTime &timestampUtc,
         writeLogEntry(timestampUtc, direction, QStringLiteral("ASC"), stripTrailingLineEndings(chunk.payload));
     }
 
-    m_logFile.flush();
+    if (m_pendingLogFlushBytes >= kFlushByteThreshold) {
+        flush();
+    } else if (m_pendingLogFlushBytes > 0) {
+        scheduleFlush();
+    }
 }
 
 }  // namespace hdgnss

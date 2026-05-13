@@ -102,6 +102,7 @@ void DeviationMapModel::addSample(double latitude, double longitude) {
         return;
     }
     m_rawSamples.append({latitude, longitude});
+    trimRawSamples();
     recalculate();
 }
 
@@ -158,7 +159,23 @@ QVariantMap DeviationMapModel::regressionRawSample(int index) const {
         {QStringLiteral("longitude"), sample.longitude}
     };
 }
+
+void DeviationMapModel::regressionFillRawSamplesForCapTest(int count) {
+    m_rawSamples.clear();
+    for (int i = 0; i < count; ++i) {
+        m_rawSamples.append({31.0 + i * 0.000001, 121.0 + i * 0.000001});
+    }
+    trimRawSamples();
+    recalculate();
+}
 #endif
+
+void DeviationMapModel::trimRawSamples() {
+    if (m_rawSamples.size() <= kMaxSamples) {
+        return;
+    }
+    m_rawSamples.remove(0, m_rawSamples.size() - kMaxSamples);
+}
 
 void DeviationMapModel::recalculate() {
     const int oldCount = m_samples.size();

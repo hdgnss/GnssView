@@ -26,6 +26,7 @@
 #include "src/models/CommandButtonModel.h"
 #include "src/tec/TecMapOverlayModel.h"
 #include "src/models/DeviationMapModel.h"
+#include "src/models/RawLogModel.h"
 #include "src/models/SatelliteModel.h"
 #include "src/models/SignalModel.h"
 #include "src/protocols/NmeaProtocolPlugin.h"
@@ -41,6 +42,7 @@ using hdgnss::DeviationMapModel;
 using hdgnss::NmeaProtocolPlugin;
 using hdgnss::ProtocolMessage;
 using hdgnss::RawLogEntry;
+using hdgnss::RawLogModel;
 using hdgnss::RawRecorder;
 using hdgnss::SatelliteInfo;
 using hdgnss::SatelliteModel;
@@ -144,6 +146,38 @@ bool expectMissingSatelliteDropsFromGsv() {
         && expect(secondSatellites.first().toMap().value(QStringLiteral("svid")).toInt() == 1, "remaining satellite should be PRN 1");
 }
 
+bool expectNmeaDropsOversizedPartialSentence() {
+    NmeaProtocolPlugin plugin;
+    const QList<ProtocolMessage> oversized = plugin.feed(QByteArrayLiteral("$GPGGA,") + QByteArray(600 * 1024, '1'));
+    if (!expect(oversized.isEmpty(), "oversized partial NMEA sentence should not decode")) {
+        return false;
+    }
+
+    const QList<ProtocolMessage> recovered = plugin.feed(withChecksum("GPGGA,123519,3112.4640,N,12135.2000,E,1,08,0.9,10.0,M,0.0,M,,"));
+    return expect(recovered.size() == 1, "NMEA parser should recover after dropping an oversized partial sentence")
+        && expect(recovered.first().messageName == QStringLiteral("GGA"),
+                  "NMEA recovery sentence should decode as GGA");
+}
+
+bool expectNmeaSatelliteCacheIsBounded() {
+    NmeaProtocolPlugin plugin;
+    QVariantList satellites;
+    for (int i = 1; i <= NmeaProtocolPlugin::kMaxCachedSatellites + 8; ++i) {
+        const QByteArray body = QStringLiteral("GPGSV,1,1,01,%1,40,083,42,%2")
+                                    .arg(1000 + i)
+                                    .arg(i)
+                                    .toLatin1();
+        const QList<ProtocolMessage> messages = plugin.feed(withChecksum(body));
+        if (!expect(messages.size() == 1, "GSV cache cap input should decode one message")) {
+            return false;
+        }
+        satellites = messages.first().fields.value(QStringLiteral("satellites")).toList();
+    }
+
+    return expect(satellites.size() <= NmeaProtocolPlugin::kMaxCachedSatellites,
+                  "NMEA satellite cache should cap retained satellites");
+}
+
 bool expectUpdateCheckerVersionComparison() {
     return expect(UpdateChecker::compareVersions(QStringLiteral("0.1.0"), QStringLiteral("0.1.0")) == 0,
                   "equal semantic versions should compare equal")
@@ -186,11 +220,37 @@ bool expectRawRecorderRequiresExplicitLogDirectory() {
                           QDateTime::fromString(QStringLiteral("2026-04-27T00:00:00Z"), Qt::ISODate),
                           QStringLiteral("unit"));
     recorder.recordRaw(entry);
+    recorder.flush();
+
+    QFile rawFile(recorder.binaryFilePath());
+    if (!expect(rawFile.open(QIODevice::ReadOnly), "raw recorder binary file should be readable after flush")
+        || !expect(rawFile.readAll() == QByteArrayLiteral("abc"),
+                   "raw recorder flush should make raw bytes visible on disk")) {
+        return false;
+    }
 
     return expect(recorder.sessionDirectory().startsWith(tempDir.path()),
                   "raw recorder session should be created under the configured log directory")
         && expect(recorder.bytesRecorded() == 3,
                   "raw recorder should write after a log directory is configured");
+}
+
+bool expectRawLogModelCapsDisplayEntries() {
+    RawLogModel model;
+    const QDateTime timestamp = QDateTime::fromString(QStringLiteral("2026-04-27T00:00:00Z"), Qt::ISODate);
+    for (int i = 0; i < RawLogModel::kMaxEntries + 5; ++i) {
+        model.appendChunk(timestamp,
+                          hdgnss::DataDirection::Rx,
+                          QStringLiteral("UART"),
+                          QStringLiteral("ASCII"),
+                          QByteArray::number(i));
+    }
+
+    const QVariantMap firstEntry = model.get(0);
+    return expect(model.rowCount() <= RawLogModel::kMaxEntries,
+                  "raw log model should cap retained display entries")
+        && expect(firstEntry.value(QStringLiteral("ascii")).toString().contains(QStringLiteral("1000")),
+                  "raw log model should drop the oldest display entries when capped");
 }
 
 bool expectBeidouGsaUsesRawPrnWithoutRemap() {
@@ -498,6 +558,20 @@ bool expectDeviationMapStats() {
         && expect(std::abs(fixedStats.value(QStringLiteral("centerLatitude")).toDouble() - 31.230400) < 1e-9, "fixed center latitude mismatch")
         && expect(std::abs(fixedStats.value(QStringLiteral("centerLongitude")).toDouble() - 121.473700) < 1e-9, "fixed center longitude mismatch")
         && expect(fixedStats.value(QStringLiteral("maxDistance")).toDouble() > 0.0, "deviation map max distance should be positive");
+}
+
+bool expectDeviationMapSampleCacheIsBounded() {
+    DeviationMapModel model;
+    model.regressionFillRawSamplesForCapTest(DeviationMapModel::kMaxSamples + 5);
+    const QVariantMap firstSample = model.regressionRawSample(0);
+    const double expectedFirstLatitude = 31.0 + 5 * 0.000001;
+
+    return expect(model.regressionRawSampleCount() == DeviationMapModel::kMaxSamples,
+                  "deviation map should cap raw sample history")
+        && expect(model.rowCount() == DeviationMapModel::kMaxSamples,
+                  "deviation map should cap rendered samples")
+        && expect(std::abs(firstSample.value(QStringLiteral("latitude")).toDouble() - expectedFirstLatitude) < 1e-12,
+                  "deviation map should drop the oldest raw samples first");
 }
 
 bool expectCommandButtonsRoundTripJson() {
@@ -1115,6 +1189,12 @@ int main(int argc, char *argv[]) {
     if (!expectMissingSatelliteDropsFromGsv()) {
         return EXIT_FAILURE;
     }
+    if (!expectNmeaDropsOversizedPartialSentence()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectNmeaSatelliteCacheIsBounded()) {
+        return EXIT_FAILURE;
+    }
     if (!expectBeidouGsaUsesRawPrnWithoutRemap()) {
         return EXIT_FAILURE;
     }
@@ -1145,7 +1225,13 @@ int main(int argc, char *argv[]) {
     if (!expectRawRecorderRequiresExplicitLogDirectory()) {
         return EXIT_FAILURE;
     }
+    if (!expectRawLogModelCapsDisplayEntries()) {
+        return EXIT_FAILURE;
+    }
     if (!expectDeviationMapStats()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectDeviationMapSampleCacheIsBounded()) {
         return EXIT_FAILURE;
     }
     if (!expectCommandButtonsRoundTripJson()) {

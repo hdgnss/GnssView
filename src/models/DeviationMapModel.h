@@ -12,6 +12,8 @@ class DeviationMapModel : public QAbstractListModel {
     Q_PROPERTY(QVariantMap stats READ stats NOTIFY statsChanged)
 
 public:
+    static constexpr int kMaxSamples = 10000;
+
     enum Roles {
         EastMetersRole = Qt::UserRole + 1,
         NorthMetersRole,
@@ -39,6 +41,7 @@ public:
 #ifdef HDGNSS_REGRESSION_TESTS
     int regressionRawSampleCount() const;
     QVariantMap regressionRawSample(int index) const;
+    void regressionFillRawSamplesForCapTest(int count);
 #endif
 
 signals:
@@ -59,6 +62,7 @@ private:
     };
 
     void recalculate();
+    void trimRawSamples();
     static QVariantMap buildAxisStats(const QList<double> &values);
     static QVariantMap buildDistanceStats(const QList<double> &values);
     static double percentile(const QList<double> &sortedValues, double ratio);

@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QFile>
 #include <QObject>
+#include <QTimer>
 
 #include "src/core/StreamChunker.h"
 #include "src/protocols/GnssTypes.h"
@@ -32,11 +33,13 @@ public:
                      const StreamChunk &chunk,
                      const QStringList &decodedLines = {});
     void startSession(const QString &baseName, const QDateTime &openedAt, const QString &qualifier = QString());
+    void flush();
 
 private:
     QString sanitizeFilePart(const QString &value) const;
     void closeFiles();
     void ensureOpen();
+    void scheduleFlush();
     void writeLogEntry(const QDateTime &timestampUtc,
                        DataDirection direction,
                        const QString &format,
@@ -47,10 +50,13 @@ private:
     QString m_fileStem;
     QFile m_binaryFile;
     QFile m_logFile;
+    QTimer m_flushTimer;
     bool m_recordRawEnabled = false;
     bool m_recordDecodeEnabled = false;
     qint64 m_bytesRecorded = 0;
     qint64 m_entriesRecorded = 0;
+    qint64 m_pendingBinaryFlushBytes = 0;
+    qint64 m_pendingLogFlushBytes = 0;
 };
 
 }  // namespace hdgnss
