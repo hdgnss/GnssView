@@ -4,7 +4,7 @@ if(CMAKE_HOST_WIN32)
     set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 endif()
 
-project(GnssView VERSION 0.1.0 LANGUAGES CXX)
+project(GnssView VERSION 0.1.1 LANGUAGES CXX)
 
 set(HDGNSS_GITHUB_OWNER "Hdgnss" CACHE STRING
     "GitHub repository owner used by the in-app update checker")
