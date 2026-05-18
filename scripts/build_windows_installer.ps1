@@ -122,6 +122,21 @@ Invoke-NativeChecked -FilePath $windeployqt -Arguments @(
     (Join-Path $stagingDir "GnssView.exe")
 )
 
+$qtQuickDialogsCandidates = @(
+    (Join-Path $stagingDir "qml\QtQuick\Dialogs"),
+    (Join-Path $stagingDir "QtQuick\Dialogs")
+)
+$qtQuickDialogsDeployed = $false
+foreach ($candidate in $qtQuickDialogsCandidates) {
+    if (Test-Path $candidate) {
+        $qtQuickDialogsDeployed = $true
+        break
+    }
+}
+if (-not $qtQuickDialogsDeployed) {
+    throw "QtQuick.Dialogs was not deployed. AutoTest panel FileDialog support requires this QML module."
+}
+
 $makensisArgs = @(
     "/DAPP_NAME=GnssView",
     "/DAPP_VERSION=$version",

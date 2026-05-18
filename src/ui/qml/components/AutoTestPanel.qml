@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 
 // Generic automation panel host.
 // Dynamically loads the plugin's panel QML (via IAutomationPlugin::panelUi())
@@ -15,6 +16,8 @@ GlassPanel {
     Theme { id: theme }
 
     // ── Dynamic panel loader ──────────────────────────────────────────────
+
+    property string panelLoadError: ""
 
     Connections {
         target: appController
@@ -46,6 +49,8 @@ GlassPanel {
     }
 
     function reloadPanelUi() {
+        root.panelLoadError = ""
+
         // Destroy any previous instance
         if (panelHost.contentItem) {
             panelHost.contentItem.destroy()
@@ -54,6 +59,7 @@ GlassPanel {
 
         var config = appController.automationPanelUiConfig()
         if (!config || !config.type) {
+            root.panelLoadError = "AutoTest plugin not loaded"
             return
         }
 
@@ -63,14 +69,22 @@ GlassPanel {
             if (component.status === Component.Ready) {
                 item = component.createObject(panelHost)
             } else {
+                root.panelLoadError = "AutoTest panel failed to load:\n" + component.errorString()
                 console.error("AutoTestPanel: failed to load QML file:", config.qmlFile, component.errorString())
                 return
             }
         } else if (config.type === "qmlSource") {
-            item = Qt.createQmlObject(config.qmlSource, panelHost, "AutoTestPanelUi.qml")
+            try {
+                item = Qt.createQmlObject(config.qmlSource, panelHost, "AutoTestPanelUi.qml")
+            } catch (error) {
+                root.panelLoadError = "AutoTest panel failed to load:\n" + error
+                console.error("AutoTestPanel: failed to create QML source:", error)
+                return
+            }
         }
 
         if (!item) {
+            root.panelLoadError = "AutoTest panel failed to load"
             return
         }
 
@@ -166,10 +180,13 @@ GlassPanel {
 
         Label {
             anchors.centerIn: parent
-            text: "AutoTest plugin not loaded"
+            width: Math.min(parent.width - 32, 720)
+            text: root.panelLoadError.length > 0 ? root.panelLoadError : "AutoTest plugin not loaded"
             color: theme.textSecondary
             font.family: theme.bodyFont
             font.pixelSize: theme.bodySize
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
         }
     }
 }
