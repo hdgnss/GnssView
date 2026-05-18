@@ -657,9 +657,9 @@ void TecMapOverlayModel::applyActiveSourceState() {
     } else if (!m_pluginsEnabled) {
         nextStatusText = QStringLiteral("TEC plugins disabled in Settings");
     } else if (m_sources.isEmpty()) {
-        nextStatusText = errors.isEmpty()
-            ? QStringLiteral("No TEC plugin available")
-            : QStringLiteral("TEC plugin load failed: %1").arg(errors.first());
+        if (!errors.isEmpty()) {
+            nextStatusText = QStringLiteral("TEC plugin load failed: %1").arg(errors.first());
+        }
     } else if (firstEnabledSourceIndex() < 0) {
         nextStatusText = QStringLiteral("No enabled TEC plugin available");
     } else if (!m_pendingObservationTimeUtc.isValid()) {

@@ -110,7 +110,7 @@ private:
     QDateTime m_pendingObservationTimeUtc;
     QList<SourceState> m_sources;
     QUrl m_overlaySource;
-    QString m_statusText = QStringLiteral("TEC waiting for GNSS UTC time");
+    QString m_statusText;
     QString m_datasetLabel = QStringLiteral("TEC unavailable");
     QVariantList m_availableTecPlugins;
     QStringList m_pluginLoadErrors;

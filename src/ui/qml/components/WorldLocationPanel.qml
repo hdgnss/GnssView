@@ -286,7 +286,7 @@ GlassPanel {
                 top: parent.top
             }
             height: implicitHeight
-            visible: root.showIonex && tecSources && tecSources.length > 0
+            visible: root.showIonex && root.tecSources && root.tecSources.length > 1
             currentIndex: Math.max(0, activeTecSourceIndex)
             z: 12
 
@@ -463,7 +463,7 @@ GlassPanel {
             color: Qt.rgba(theme.surface0.r, theme.surface0.g, theme.surface0.b, 0.72)
             border.width: 1
             border.color: Qt.rgba(theme.panelBorderStrong.r, theme.panelBorderStrong.g, theme.panelBorderStrong.b, 0.28)
-            visible: root.showIonex
+            visible: root.showIonex && ionexInfoText.text.length > 0
             z: 12
 
             Text {
