@@ -878,9 +878,14 @@ GlassPanel {
                         }
                     }
 
-                    ColumnLayout {
+                    ScrollView {
                         anchors.fill: parent
-                        spacing: theme.sectionSpacing
+                        clip: true
+                        contentWidth: availableWidth
+
+                        ColumnLayout {
+                            width: parent.width
+                            spacing: theme.sectionSpacing
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -987,6 +992,7 @@ GlassPanel {
                         }
                     }
                 }
+            }
             }
         }
     }
