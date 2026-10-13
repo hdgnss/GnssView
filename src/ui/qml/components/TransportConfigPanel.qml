@@ -186,12 +186,13 @@ GlassPanel {
     }
 
     function transportDescriptorByName(name) {
-        if (!transportList) {
+        if (!transportList || !name) {
             return null
         }
+        var target = String(name).toLowerCase()
         for (var i = 0; i < transportList.length; ++i) {
             var item = transportList[i]
-            if (item && item.transportName === name) {
+            if (item && String(item.transportName).toLowerCase() === target) {
                 return item
             }
         }
@@ -203,11 +204,11 @@ GlassPanel {
     }
 
     function isTransportLockedOut(name) {
-        return lockedTransport.length > 0 && lockedTransport !== name
+        return lockedTransport.length > 0 && String(lockedTransport).toLowerCase() !== String(name).toLowerCase()
     }
 
     function isTransportOpenOrLocked(name) {
-        if (lockedTransport === name) {
+        if (String(lockedTransport).toLowerCase() === String(name).toLowerCase()) {
             return true
         }
         return transportViewModel ? transportViewModel.transportOpen(name) : false
@@ -221,8 +222,9 @@ GlassPanel {
         }
         for (var i = 0; i < transportList.length; ++i) {
             var transport = transportList[i]
-            if (transport.category === "plugin" && !seen[transport.transportName]) {
-                seen[transport.transportName] = true
+            var key = String(transport.transportName).toLowerCase()
+            if (transport.category === "plugin" && !seen[key]) {
+                seen[key] = true
                 plugins.push(transport)
             }
         }
@@ -233,8 +235,9 @@ GlassPanel {
         if (!transportList || transportList.length === 0) {
             return -1
         }
+        var target = String(transportSettings.currentTransport).toLowerCase()
         for (var i = 0; i < transportList.length; ++i) {
-            if (transportList[i].transportName === transportSettings.currentTransport) {
+            if (String(transportList[i].transportName).toLowerCase() === target) {
                 return i
             }
         }
@@ -349,22 +352,26 @@ GlassPanel {
 
     function preserveTransportSelection(name, action) {
         var target = name && name.length > 0 ? name : transportSettings.currentTransport
-        root.syncingTabs = true
+        var targetDescriptor = root.transportDescriptorByName(target)
+        var actualName = targetDescriptor ? targetDescriptor.transportName : target
+
         if (typeof action === "function") {
             action()
         }
+
         Qt.callLater(function() {
-            if (target && root.transportDescriptorByName(target)) {
-                transportSettings.currentTransport = target
+            if (actualName) {
+                transportSettings.currentTransport = actualName
                 if (transportViewModel) {
-                    transportViewModel.activeTransport = target
+                    transportViewModel.activeTransport = actualName
                 }
                 var index = root.currentTransportIndex()
-                if (index >= 0) {
+                if (index >= 0 && tabs.currentIndex !== index) {
+                    root.syncingTabs = true
                     tabs.currentIndex = index
+                    root.syncingTabs = false
                 }
             }
-            root.syncingTabs = false
         })
     }
 
