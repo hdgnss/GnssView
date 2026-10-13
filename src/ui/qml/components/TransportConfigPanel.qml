@@ -904,12 +904,6 @@ GlassPanel {
                             }
                         }
 
-                        HelpText {
-                            visible: descriptorData.hardwareInterfaces && descriptorData.hardwareInterfaces.length > 0
-                            Layout.fillWidth: true
-                            text: "Hardware Interfaces: " + descriptorData.hardwareInterfaces.join(", ")
-                        }
-
                         CustomPluginUi {
                             Layout.fillWidth: true
                             visible: root.hasCustomPluginUi(descriptorData)
@@ -918,45 +912,41 @@ GlassPanel {
                             style: root.pluginUiStyle()
                         }
 
-                        Repeater {
-                            model: root.hasCustomPluginUi(descriptorData) ? [] : (descriptorData.fields || [])
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 2
+                            columnSpacing: 8
+                            rowSpacing: 6
+                            visible: !root.hasCustomPluginUi(descriptorData) && (descriptorData.fields && descriptorData.fields.length > 0)
 
-                            delegate: ColumnLayout {
-                                required property var modelData
-                                Layout.fillWidth: true
-                                spacing: 6
+                            Repeater {
+                                model: root.hasCustomPluginUi(descriptorData) ? [] : (descriptorData.fields || [])
 
-                                DenseLabel {
-                                    text: parent.modelData.label || parent.modelData.key
-                                }
-
-                                Loader {
+                                delegate: ColumnLayout {
+                                    required property var modelData
                                     Layout.fillWidth: true
-                                    property var fieldData: parent.modelData
-                                    sourceComponent: {
-                                        var fieldType = String(fieldData.type || "text").toLowerCase()
-                                        if (fieldType === "select" || fieldType === "enum" || fieldType === "combo") {
-                                            return comboFieldComponent
+                                    spacing: 3
+
+                                    DenseLabel {
+                                        text: parent.modelData.label || parent.modelData.key
+                                    }
+
+                                    Loader {
+                                        Layout.fillWidth: true
+                                        property var fieldData: parent.modelData
+                                        sourceComponent: {
+                                            var fieldType = String(fieldData.type || "text").toLowerCase()
+                                            if (fieldType === "select" || fieldType === "enum" || fieldType === "combo") {
+                                                return comboFieldComponent
+                                            }
+                                            if (fieldType === "bool" || fieldType === "boolean" || fieldType === "checkbox") {
+                                                return boolFieldComponent
+                                            }
+                                            return textFieldComponent
                                         }
-                                        if (fieldType === "bool" || fieldType === "boolean" || fieldType === "checkbox") {
-                                            return boolFieldComponent
-                                        }
-                                        return textFieldComponent
                                     }
                                 }
-
-                                HelpText {
-                                    visible: !!(parent.modelData.description && parent.modelData.description.length > 0)
-                                    Layout.fillWidth: true
-                                    text: parent.modelData.description || ""
-                                }
                             }
-                        }
-
-                        HelpText {
-                            visible: !root.hasCustomPluginUi(descriptorData) && (!descriptorData.fields || descriptorData.fields.length === 0)
-                            Layout.fillWidth: true
-                            text: "This transport plugin currently has no extra configuration fields."
                         }
 
                         HelpText {
