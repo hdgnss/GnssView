@@ -92,17 +92,18 @@ Popup {
     }
 
     component DenseField: TextField {
+        id: denseControl
         implicitHeight: theme.controlHeight
-        color: theme.textPrimary
+        color: (!enabled || readOnly) ? theme.textSecondary : theme.textPrimary
         font.family: theme.bodyFont
         font.pixelSize: theme.bodySize
         selectByMouse: true
         padding: 10
         background: Rectangle {
             radius: theme.controlRadius
-            color: theme.inputBg
+            color: (!denseControl.enabled || denseControl.readOnly) ? Qt.rgba(theme.inputBg.r, theme.inputBg.g, theme.inputBg.b, 0.45) : theme.inputBg
             border.width: 1
-            border.color: parent.activeFocus ? theme.inputBorderFocus : theme.inputBorder
+            border.color: (!denseControl.enabled || denseControl.readOnly) ? theme.panelBorder : (denseControl.activeFocus ? theme.inputBorderFocus : theme.inputBorder)
         }
     }
 
@@ -459,10 +460,14 @@ Popup {
                     ? String(parent.fieldData.value)
                     : ""
                 placeholderText: parent.fieldData ? (parent.fieldData.placeholder || "") : ""
+                readOnly: Boolean(parent.fieldData && (parent.fieldData.readOnly || parent.fieldData.readonly))
                 echoMode: String(parent.fieldData ? (parent.fieldData.type || "") : "").toLowerCase() === "password"
                     ? TextInput.Password
                     : TextInput.Normal
                 onEditingFinished: {
+                    if (readOnly) {
+                        return
+                    }
                     if (appSettings && parent.fieldData) {
                         appSettings.setPluginSettingValue(sectionData.pluginId, parent.fieldData.key, text)
                     }
@@ -483,6 +488,7 @@ Popup {
             PluginComboBox {
                 id: fieldEditor
                 width: parent.width
+                enabled: !parent.fieldData || (!parent.fieldData.readOnly && !parent.fieldData.readonly)
                 model: {
                     var source = parent.fieldData && (parent.fieldData.options || parent.fieldData.choices || parent.fieldData.values)
                     if (!source || source.length === undefined) {
@@ -515,6 +521,9 @@ Popup {
                     }
                 }
                 onActivated: {
+                    if (parent.fieldData && (parent.fieldData.readOnly || parent.fieldData.readonly)) {
+                        return
+                    }
                     if (appSettings && parent.fieldData && currentIndex >= 0 && currentIndex < model.length) {
                         appSettings.setPluginSettingValue(sectionData.pluginId, parent.fieldData.key, model[currentIndex].value)
                     }
@@ -535,12 +544,16 @@ Popup {
             PluginFieldCheckBox {
                 id: fieldEditor
                 width: parent.width
+                enabled: !parent.fieldData || (!parent.fieldData.readOnly && !parent.fieldData.readonly)
                 text: parent.fieldData ? (parent.fieldData.checkboxLabel || "Enabled") : "Enabled"
                 checked: {
                     var value = parent.fieldData ? parent.fieldData.value : undefined
                     return value === true || String(value).toLowerCase() === "true" || String(value) === "1"
                 }
                 onToggled: {
+                    if (parent.fieldData && (parent.fieldData.readOnly || parent.fieldData.readonly)) {
+                        return
+                    }
                     if (appSettings && parent.fieldData) {
                         appSettings.setPluginSettingValue(sectionData.pluginId, parent.fieldData.key, checked)
                     }

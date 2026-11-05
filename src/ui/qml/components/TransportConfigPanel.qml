@@ -355,6 +355,7 @@ GlassPanel {
         var targetDescriptor = root.transportDescriptorByName(target)
         var actualName = targetDescriptor ? targetDescriptor.transportName : target
 
+        root.syncingTabs = true
         if (typeof action === "function") {
             action()
         }
@@ -367,11 +368,10 @@ GlassPanel {
                 }
                 var index = root.currentTransportIndex()
                 if (index >= 0 && tabs.currentIndex !== index) {
-                    root.syncingTabs = true
                     tabs.currentIndex = index
-                    root.syncingTabs = false
                 }
             }
+            root.syncingTabs = false
         })
     }
 
@@ -541,6 +541,9 @@ GlassPanel {
             Layout.fillWidth: true
             onCurrentIndexChanged: {
                 if (root.syncingTabs) {
+                    return
+                }
+                if (tabs.count < (root.transportList ? root.transportList.length : 0)) {
                     return
                 }
                 if (currentIndex >= 0 && root.transportList && currentIndex < root.transportList.length) {

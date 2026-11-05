@@ -430,7 +430,9 @@ QVariantList TransportViewModel::configurableFields(QObject *pluginObject, const
         if (key.isEmpty()) {
             continue;
         }
-        if (m_settings) {
+        const bool isReadOnly = field.value(QStringLiteral("readOnly")).toBool() ||
+                                field.value(QStringLiteral("readonly")).toBool();
+        if (m_settings && !isReadOnly) {
             field.insert(QStringLiteral("value"),
                          m_settings->pluginSettingValue(settingsId,
                                                         key,
@@ -557,13 +559,16 @@ void TransportViewModel::hookTransport(ITransport *transport) {
     if (!transport) {
         return;
     }
-    connect(transport, &ITransport::statusChanged, this, &TransportViewModel::statusesChanged, Qt::UniqueConnection);
-    connect(transport, &ITransport::openChanged, this, &TransportViewModel::handleTransportOpenChanged, Qt::UniqueConnection);
+    connect(transport, &ITransport::statusChanged, this, &TransportViewModel::statusesChanged);
+    connect(transport, &ITransport::openChanged, this, [this, transport]() {
+        setLockedTransport(currentOpenTransportName());
+        emit transportDescriptorChanged(transport->name());
+        emit statusesChanged();
+    });
 }
 
 void TransportViewModel::handleTransportOpenChanged() {
     setLockedTransport(currentOpenTransportName());
-    emit availableTransportsChanged();
     emit statusesChanged();
 }
 

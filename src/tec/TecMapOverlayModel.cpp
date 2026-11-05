@@ -139,7 +139,14 @@ QVariantMap tecPluginDescriptor(QObject *pluginObject, AppSettings *settings) {
         if (key.isEmpty()) {
             continue;
         }
-        field.insert(QStringLiteral("value"), settings ? settings->pluginSettingValue(pluginId, key) : QVariant{});
+        const bool isReadOnly = field.value(QStringLiteral("readOnly")).toBool() ||
+                                field.value(QStringLiteral("readonly")).toBool();
+        if (settings && !isReadOnly) {
+            field.insert(QStringLiteral("value"),
+                         settings->pluginSettingValue(pluginId,
+                                                      key,
+                                                      field.value(QStringLiteral("value"))));
+        }
         fields.append(field);
     }
 
