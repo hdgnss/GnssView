@@ -7,12 +7,13 @@
 #include <QRegularExpression>
 #include <QTimeZone>
 
+#include "src/core/SatelliteCachePruning.h"
+
 namespace hdgnss {
 
 namespace {
 
 constexpr int kMaxBufferedNmeaBytes = 512 * 1024;
-constexpr qint64 kSatelliteRetentionMs = 30 * 1000;
 
 double parseOptionalDouble(const QByteArray &field) {
     if (field.isEmpty()) {
@@ -704,26 +705,7 @@ bool NmeaProtocolPlugin::isSatelliteUsed(const QString &constellation, const QSt
 }
 
 void NmeaProtocolPlugin::pruneSatelliteCache(qint64 nowMs) {
-    for (auto it = m_satelliteLastSeenMs.begin(); it != m_satelliteLastSeenMs.end();) {
-        if ((nowMs - it.value()) > kSatelliteRetentionMs) {
-            m_satellites.remove(it.key());
-            it = m_satelliteLastSeenMs.erase(it);
-            continue;
-        }
-        ++it;
-    }
-
-    while (m_satellites.size() > kMaxCachedSatellites && !m_satelliteLastSeenMs.isEmpty()) {
-        auto oldestIt = m_satelliteLastSeenMs.cbegin();
-        for (auto it = m_satelliteLastSeenMs.cbegin(); it != m_satelliteLastSeenMs.cend(); ++it) {
-            if (it.value() < oldestIt.value()) {
-                oldestIt = it;
-            }
-        }
-        const QString oldestKey = oldestIt.key();
-        m_satelliteLastSeenMs.remove(oldestKey);
-        m_satellites.remove(oldestKey);
-    }
+    hdgnss::pruneSatelliteCache(m_satellites, m_satelliteLastSeenMs, nowMs, kMaxCachedSatellites);
 }
 
 QVariantList NmeaProtocolPlugin::satelliteVariantList() const {

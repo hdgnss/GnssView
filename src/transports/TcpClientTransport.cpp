@@ -16,6 +16,7 @@ TcpClientTransport::TcpClientTransport(QObject *parent)
     });
     connect(&m_socket, &QTcpSocket::disconnected, this, [this]() {
         m_readBuffer.clear();
+        m_readOffset = 0;
         m_dispatchScheduled = false;
         setStatus(QStringLiteral("Disconnected"));
         emitOpenChanged();
@@ -41,6 +42,7 @@ void TcpClientTransport::close() {
         m_socket.abort();
     }
     m_readBuffer.clear();
+    m_readOffset = 0;
     m_dispatchScheduled = false;
     m_host.clear();
     m_port = 0;
@@ -84,15 +86,23 @@ void TcpClientTransport::scheduleBufferedDispatch() {
 
 void TcpClientTransport::dispatchBufferedReads() {
     m_dispatchScheduled = false;
-    if (m_readBuffer.isEmpty()) {
+    if (m_readOffset >= m_readBuffer.size()) {
+        m_readBuffer.clear();
+        m_readOffset = 0;
         return;
     }
 
-    const QByteArray chunk = m_readBuffer.left(kDispatchChunkBytes);
-    m_readBuffer.remove(0, chunk.size());
+    // Advance a read offset instead of erasing the front on every dispatch
+    // (O(n) memmove each time); compact once the buffer is fully drained.
+    const QByteArray chunk = m_readBuffer.mid(m_readOffset, kDispatchChunkBytes);
+    m_readOffset += chunk.size();
+    if (m_readOffset >= m_readBuffer.size()) {
+        m_readBuffer.clear();
+        m_readOffset = 0;
+    }
     emit dataReceived(chunk);
 
-    if (!m_readBuffer.isEmpty()) {
+    if (m_readOffset < m_readBuffer.size()) {
         scheduleBufferedDispatch();
     }
 }

@@ -1,5 +1,6 @@
 #include "SerialTransport.h"
 
+#include <QMetaObject>
 #include <QSerialPortInfo>
 
 namespace hdgnss {
@@ -47,6 +48,16 @@ SerialTransport::SerialTransport(QObject *parent)
         const QString message = m_serial.errorString();
         setStatus(message);
         emit errorOccurred(message);
+        // The device went away (e.g. USB unplugged): the port is unusable, so
+        // close it instead of continuing to report a connected state.
+        if (error == QSerialPort::ResourceError || error == QSerialPort::PermissionError) {
+            QMetaObject::invokeMethod(this, [this, message]() {
+                if (m_serial.isOpen()) {
+                    close();
+                    setStatus(message);
+                }
+            }, Qt::QueuedConnection);
+        }
     });
 }
 

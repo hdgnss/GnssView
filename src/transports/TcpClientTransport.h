@@ -28,6 +28,7 @@ private:
 
     QTcpSocket m_socket;
     QByteArray m_readBuffer;
+    int m_readOffset = 0;
     bool m_dispatchScheduled = false;
     QString m_host;
     quint16 m_port = 0;

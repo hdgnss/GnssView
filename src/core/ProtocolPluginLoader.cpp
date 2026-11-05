@@ -44,7 +44,7 @@ void appendDelimitedPaths(QStringList &paths, const QByteArray &value) {
 bool hasExpectedPluginIid(const QPluginLoader &loader, const QString &expectedIid) {
     const QJsonValue iidValue = loader.metaData().value(QStringLiteral("IID"));
     if (!iidValue.isString()) {
-        return true;
+        return false;
     }
     return iidValue.toString() == expectedIid;
 }

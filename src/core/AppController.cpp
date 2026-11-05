@@ -21,12 +21,13 @@
 #include "src/tec/TecMapOverlayModel.h"
 #include "src/utils/ByteUtils.h"
 
+#include "src/core/SatelliteCachePruning.h"
+
 namespace hdgnss {
 
 namespace {
 
 constexpr int kMaxControllerSatellites = 512;
-constexpr qint64 kSatelliteRetentionMs = 30 * 1000;
 
 QVariantMap protocolPluginDescriptor(QObject *pluginObject, AppSettings *settings) {
     QVariantMap descriptor;
@@ -158,6 +159,7 @@ AppController::AppController(AppSettings *settings, QObject *parent)
     m_fileSendTimer.setSingleShot(true);
     connect(&m_fileSendTimer, &QTimer::timeout, this, &AppController::sendNextFilePacket);
 
+    connect(&m_rawRecorder, &RawRecorder::writeFailed, this, &AppController::statusMessage);
     m_uiRefreshTimer.setSingleShot(true);
     m_uiRefreshTimer.setInterval(50);
     connect(&m_uiRefreshTimer, &QTimer::timeout, this, &AppController::flushUiRefresh);
@@ -736,6 +738,7 @@ void AppController::resetTransportState(const QString &transportName) {
     m_streamBuffers.remove(txKey);
     m_protocolDispatcher.resetStream(rxKey);
     m_protocolDispatcher.resetStream(txKey);
+    m_nmea.resetState();
 }
 
 void AppController::resetAllStreamState(bool clearUi) {
@@ -1219,6 +1222,14 @@ void AppController::handleIncomingBytes(const QString &transportName, const QByt
     streamBuffer.append(bytes);
     const QList<StreamChunk> chunks = streamBuffer.takeAvailableChunks(m_binaryFramers);
     for (const StreamChunk &chunk : chunks) {
+        // Tx traffic is only logged/recorded. Feeding it to the protocol
+        // parsers would let our own commands modify the decoded device state
+        // and pin the binary router to a protocol the device never spoke.
+        if (!isRx) {
+            m_rawRecorder.recordChunk(entry.timestampUtc, direction, chunk, QStringList{});
+            m_rawLogModel.appendChunk(entry.timestampUtc, direction, transportName, chunk.kindName(), chunk.payload);
+            continue;
+        }
         const QList<ProtocolMessage> messages = m_protocolDispatcher.routeChunk(streamKey, chunk);
         if (chunk.kind == StreamChunkKind::Binary && !messages.isEmpty()) {
             for (const ProtocolMessage &message : messages) {
@@ -1405,26 +1416,7 @@ void AppController::recordDeviationSample(const ProtocolMessage &message) {
 }
 
 void AppController::pruneSatelliteCache(qint64 nowMs) {
-    for (auto it = m_satelliteLastSeenMs.begin(); it != m_satelliteLastSeenMs.end();) {
-        if ((nowMs - it.value()) > kSatelliteRetentionMs) {
-            m_satellites.remove(it.key());
-            it = m_satelliteLastSeenMs.erase(it);
-            continue;
-        }
-        ++it;
-    }
-
-    while (m_satellites.size() > kMaxControllerSatellites && !m_satelliteLastSeenMs.isEmpty()) {
-        auto oldestIt = m_satelliteLastSeenMs.cbegin();
-        for (auto it = m_satelliteLastSeenMs.cbegin(); it != m_satelliteLastSeenMs.cend(); ++it) {
-            if (it.value() < oldestIt.value()) {
-                oldestIt = it;
-            }
-        }
-        const QString oldestKey = oldestIt.key();
-        m_satelliteLastSeenMs.remove(oldestKey);
-        m_satellites.remove(oldestKey);
-    }
+    hdgnss::pruneSatelliteCache(m_satellites, m_satelliteLastSeenMs, nowMs, kMaxControllerSatellites);
 }
 
 void AppController::scheduleUiRefresh() {

@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QHash>
+#include <QTimer>
 
 #include "src/core/StreamChunker.h"
 #include "src/protocols/GnssTypes.h"
@@ -35,6 +36,10 @@ public:
 
     Q_INVOKABLE QVariantMap get(int row) const;
     Q_INVOKABLE void clear();
+    // Appended entries are queued and published to views in one batch (one
+    // rowsInserted / countChanged per flush). Flushes run on a short timer;
+    // call flushPending() to publish immediately.
+    void flushPending();
     void appendEntry(const RawLogEntry &entry);
     void appendChunk(const QDateTime &timestampUtc,
                      DataDirection direction,
@@ -52,6 +57,7 @@ signals:
 
 private:
     static constexpr int kTrimBatchSize = 1000;
+    static constexpr int kFlushIntervalMs = 50;
 
     struct DisplayEntry {
         QDateTime timestampUtc;
@@ -64,9 +70,10 @@ private:
     };
 
     void appendDisplayEntry(const DisplayEntry &entry);
-    void trimEntriesForAppend();
 
     QList<DisplayEntry> m_entries;
+    QList<DisplayEntry> m_pending;
+    QTimer m_flushTimer;
     QHash<QString, StreamChunker> m_pendingBuffers;
 };
 

@@ -45,7 +45,11 @@ QString displayTextForEntry(const QString &kind,
 
 } // namespace
 
-RawLogModel::RawLogModel(QObject *parent) : QAbstractListModel(parent) {}
+RawLogModel::RawLogModel(QObject *parent) : QAbstractListModel(parent) {
+  m_flushTimer.setSingleShot(true);
+  m_flushTimer.setInterval(kFlushIntervalMs);
+  connect(&m_flushTimer, &QTimer::timeout, this, &RawLogModel::flushPending);
+}
 
 int RawLogModel::rowCount(const QModelIndex &parent) const {
   return parent.isValid() ? 0 : m_entries.size();
@@ -119,7 +123,7 @@ QVariantMap RawLogModel::get(int row) const {
 }
 
 void RawLogModel::clear() {
-  if (m_entries.isEmpty() && m_pendingBuffers.isEmpty()) {
+  if (m_entries.isEmpty() && m_pending.isEmpty() && m_pendingBuffers.isEmpty()) {
     return;
   }
   if (rawDataScrollDebugEnabled()) {
@@ -128,6 +132,8 @@ void RawLogModel::clear() {
   }
   beginResetModel();
   m_entries.clear();
+  m_pending.clear();
+  m_flushTimer.stop();
   m_pendingBuffers.clear();
   endResetModel();
   emit countChanged();
@@ -150,7 +156,6 @@ void RawLogModel::appendEntry(const RawLogEntry &entry) {
         chunk.kindName(), QString{}, chunk.payload.left(kPreviewBytes),
         static_cast<int>(chunk.payload.size())});
   }
-  emit countChanged();
 }
 
 void RawLogModel::appendChunk(const QDateTime &timestampUtc,
@@ -160,7 +165,6 @@ void RawLogModel::appendChunk(const QDateTime &timestampUtc,
   appendDisplayEntry(DisplayEntry{timestampUtc, direction, transportName, kind,
                                   QString{}, payload.left(kPreviewBytes),
                                   static_cast<int>(payload.size())});
-  emit countChanged();
 }
 
 void RawLogModel::appendProtocolMessage(const QDateTime &timestampUtc,
@@ -172,27 +176,50 @@ void RawLogModel::appendProtocolMessage(const QDateTime &timestampUtc,
                                   message.messageName,
                                   message.rawFrame.left(kPreviewBytes),
                                   static_cast<int>(message.rawFrame.size())});
-  emit countChanged();
 }
 
 void RawLogModel::appendDisplayEntry(const DisplayEntry &entry) {
-  trimEntriesForAppend();
-  const int row = m_entries.size();
-  beginInsertRows({}, row, row);
-  m_entries.append(entry);
-  endInsertRows();
+  m_pending.append(entry);
+  if (!m_flushTimer.isActive()) {
+    m_flushTimer.start();
+  }
 }
 
-void RawLogModel::trimEntriesForAppend() {
-  if (m_entries.size() < kMaxEntries) {
+void RawLogModel::flushPending() {
+  m_flushTimer.stop();
+  if (m_pending.isEmpty()) {
     return;
   }
 
-  const int removeCount =
-      qMin(m_entries.size(), m_entries.size() - kMaxEntries + kTrimBatchSize);
-  beginRemoveRows({}, 0, removeCount - 1);
-  m_entries.remove(0, removeCount);
-  endRemoveRows();
+  // Replay the per-entry trim policy (drop kTrimBatchSize oldest entries each
+  // time the cap is reached) in aggregate so the batch ends in the same state
+  // as sequential appends would.
+  int size = m_entries.size();
+  int dropped = 0;
+  for (int i = 0; i < m_pending.size(); ++i) {
+    if (size >= kMaxEntries) {
+      dropped += kTrimBatchSize;
+      size -= kTrimBatchSize;
+    }
+    ++size;
+  }
+  const int dropExisting = qMin(dropped, m_entries.size());
+  const int dropPending = dropped - dropExisting;
+
+  if (dropExisting > 0) {
+    beginRemoveRows({}, 0, dropExisting - 1);
+    m_entries.remove(0, dropExisting);
+    endRemoveRows();
+  }
+  const int insertCount = m_pending.size() - dropPending;
+  if (insertCount > 0) {
+    const int row = m_entries.size();
+    beginInsertRows({}, row, row + insertCount - 1);
+    m_entries.append(m_pending.mid(dropPending));
+    endInsertRows();
+  }
+  m_pending.clear();
+  emit countChanged();
 }
 
 } // namespace hdgnss

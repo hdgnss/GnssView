@@ -27,6 +27,8 @@ public:
     void setLogRootDirectory(const QString &directory);
     void setRecordRawEnabled(bool enabled);
     void setRecordDecodeEnabled(bool enabled);
+    // Only Rx bytes are written to the raw binary file so it stays a faithful
+    // replayable capture of the device output; Tx is kept in the decode log.
     void recordRaw(const RawLogEntry &entry);
     void recordChunk(const QDateTime &timestampUtc,
                      DataDirection direction,
@@ -34,6 +36,10 @@ public:
                      const QStringList &decodedLines = {});
     void startSession(const QString &baseName, const QDateTime &openedAt, const QString &qualifier = QString());
     void flush();
+
+signals:
+    // Emitted once per session when a write to disk fails (e.g. disk full).
+    void writeFailed(const QString &message);
 
 private:
     QString sanitizeFilePart(const QString &value) const;
@@ -57,6 +63,8 @@ private:
     qint64 m_entriesRecorded = 0;
     qint64 m_pendingBinaryFlushBytes = 0;
     qint64 m_pendingLogFlushBytes = 0;
+    bool m_writeFailureReported = false;
+    void reportWriteFailure(const QString &path, const QString &error);
 };
 
 }  // namespace hdgnss

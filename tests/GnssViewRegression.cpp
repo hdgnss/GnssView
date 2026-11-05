@@ -29,6 +29,7 @@
 #include "src/models/RawLogModel.h"
 #include "src/models/SatelliteModel.h"
 #include "src/models/SignalModel.h"
+#include "src/core/SatelliteCachePruning.h"
 #include "src/protocols/NmeaProtocolPlugin.h"
 #include "src/storage/RawRecorder.h"
 #include "src/tec/TecMapRenderer.h"
@@ -229,10 +230,34 @@ bool expectRawRecorderRequiresExplicitLogDirectory() {
         return false;
     }
 
+    RawLogEntry txEntry = entry;
+    txEntry.direction = hdgnss::DataDirection::Tx;
+    txEntry.payload = QByteArrayLiteral("tx-only");
+    recorder.recordRaw(txEntry);
+
     return expect(recorder.sessionDirectory().startsWith(tempDir.path()),
                   "raw recorder session should be created under the configured log directory")
         && expect(recorder.bytesRecorded() == 3,
-                  "raw recorder should write after a log directory is configured");
+                  "raw recorder should write Rx bytes only, never Tx");
+}
+
+bool expectSatelliteCachePruning() {
+    QHash<QString, hdgnss::SatelliteInfo> sats;
+    QHash<QString, qint64> seen;
+    for (int i = 0; i < 6; ++i) {
+        const QString key = QString::number(i);
+        sats.insert(key, hdgnss::SatelliteInfo{});
+        seen.insert(key, 1000 + i);
+    }
+    sats.insert(QStringLiteral("stale"), hdgnss::SatelliteInfo{});
+    seen.insert(QStringLiteral("stale"), 0);
+
+    hdgnss::pruneSatelliteCache(sats, seen, 1000 + hdgnss::kSatelliteRetentionMs + 1, 4);
+    return expect(!sats.contains(QStringLiteral("stale")), "stale satellites should be pruned")
+        && expect(sats.size() == 4 && seen.size() == 4, "cache should be capped at maxCount")
+        && expect(!sats.contains(QStringLiteral("0")) && !sats.contains(QStringLiteral("1"))
+                      && sats.contains(QStringLiteral("5")),
+                  "oldest satellites should be evicted first");
 }
 
 bool expectRawLogModelCapsDisplayEntries() {
@@ -246,8 +271,13 @@ bool expectRawLogModelCapsDisplayEntries() {
                           QByteArray::number(i));
     }
 
+    int insertSignals = 0;
+    QObject::connect(&model, &QAbstractItemModel::rowsInserted, [&insertSignals]() { ++insertSignals; });
+    model.flushPending();
+
     const QVariantMap firstEntry = model.get(0);
-    return expect(model.rowCount() <= RawLogModel::kMaxEntries,
+    return expect(insertSignals <= 1, "raw log model should publish a batch with one rowsInserted")
+        && expect(model.rowCount() <= RawLogModel::kMaxEntries,
                   "raw log model should cap retained display entries")
         && expect(firstEntry.value(QStringLiteral("ascii")).toString().contains(QStringLiteral("1000")),
                   "raw log model should drop the oldest display entries when capped");
@@ -1224,6 +1254,9 @@ int main(int argc, char *argv[]) {
     }
     if (!expectRawRecorderRequiresExplicitLogDirectory()) {
         return EXIT_FAILURE;
+    }
+    if (!expectSatelliteCachePruning()) {
+        return 1;
     }
     if (!expectRawLogModelCapsDisplayEntries()) {
         return EXIT_FAILURE;

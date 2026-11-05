@@ -120,6 +120,7 @@ void RawRecorder::startSession(const QString &baseName, const QDateTime &openedA
     closeFiles();
     m_bytesRecorded = 0;
     m_entriesRecorded = 0;
+    m_writeFailureReported = false;
     m_sessionDirectory.clear();
     m_fileStem.clear();
 
@@ -177,10 +178,21 @@ void RawRecorder::writeLogEntry(const QDateTime &timestampUtc,
                                   data);
     const QByteArray lineBytes = line.toUtf8();
     const qint64 written = m_logFile.write(lineBytes);
+    if (written != lineBytes.size()) {
+        reportWriteFailure(m_logFile.fileName(), m_logFile.errorString());
+    }
     if (written > 0) {
         m_pendingLogFlushBytes += written;
     }
     ++m_entriesRecorded;
+}
+
+void RawRecorder::reportWriteFailure(const QString &path, const QString &error) {
+    if (m_writeFailureReported) {
+        return;
+    }
+    m_writeFailureReported = true;
+    emit writeFailed(QStringLiteral("Failed to write %1: %2").arg(path, error));
 }
 
 void RawRecorder::scheduleFlush() {
@@ -204,7 +216,7 @@ void RawRecorder::flush() {
 }
 
 void RawRecorder::recordRaw(const RawLogEntry &entry) {
-    if (!m_recordRawEnabled) {
+    if (!m_recordRawEnabled || entry.direction != DataDirection::Rx) {
         return;
     }
     ensureOpen();
@@ -213,6 +225,9 @@ void RawRecorder::recordRaw(const RawLogEntry &entry) {
     }
 
     const qint64 written = m_binaryFile.write(entry.payload);
+    if (written != entry.payload.size()) {
+        reportWriteFailure(m_binaryFile.fileName(), m_binaryFile.errorString());
+    }
     if (written > 0) {
         m_bytesRecorded += written;
         m_pendingBinaryFlushBytes += written;

@@ -200,11 +200,30 @@ void StreamChunker::append(const QByteArray &bytes) {
 QList<StreamChunk> StreamChunker::takeAvailableChunks(const QList<BinaryFramer> &framers) {
     QList<StreamChunk> chunks;
 
-    while (!m_buffer.isEmpty()) {
+    // Walk the buffer with a read offset and a zero-copy view; erasing the
+    // consumed prefix once at the end avoids O(n^2) memmoves per call.
+    int offset = 0;
+    QByteArray view;
+    auto refreshView = [&]() {
+        view = QByteArray::fromRawData(m_buffer.constData() + offset, m_buffer.size() - offset);
+    };
+    // fromRawData views must never escape; always deep-copy emitted payloads.
+    auto owned = [&](int length) {
+        return QByteArray(view.constData(), length);
+    };
+    auto finish = [&]() {
+        view = QByteArray();
+        if (offset > 0) {
+            m_buffer.remove(0, offset);
+        }
+    };
+
+    while (offset < m_buffer.size()) {
+        refreshView();
         int binaryFrameSize = 0;
         bool pendingBinaryFrame = false;
         for (const BinaryFramer &framer : framers) {
-            const int result = framer(m_buffer);
+            const int result = framer(view);
             if (result > 0) {
                 binaryFrameSize = result;
                 break;
@@ -214,57 +233,58 @@ QList<StreamChunk> StreamChunker::takeAvailableChunks(const QList<BinaryFramer> 
             }
         }
         if (binaryFrameSize > 0) {
-            chunks.append({StreamChunkKind::Binary, m_buffer.left(binaryFrameSize)});
-            m_buffer.remove(0, binaryFrameSize);
+            chunks.append({StreamChunkKind::Binary, owned(binaryFrameSize)});
+            offset += binaryFrameSize;
             continue;
         }
         if (pendingBinaryFrame) {
             break;
         }
 
-        if (looksLikeTextRun(m_buffer, 0, true)) {
-            const int lineEnd = findLineEnd(m_buffer);
+        if (looksLikeTextRun(view, 0, true)) {
+            const int lineEnd = findLineEnd(view);
             if (lineEnd < 0) {
-                if (m_buffer.size() > kMaxBufferedTextBytes) {
-                    chunks.append({classifyChunk(m_buffer), m_buffer});
-                    m_buffer.clear();
+                if (view.size() > kMaxBufferedTextBytes) {
+                    chunks.append({classifyChunk(owned(view.size())), owned(view.size())});
+                    offset = m_buffer.size();
                 }
                 break;
             }
 
-            const int consumeEnd = consumeLineEnding(m_buffer, lineEnd);
-            const QByteArray line = m_buffer.left(consumeEnd);
+            const int consumeEnd = consumeLineEnding(view, lineEnd);
+            const QByteArray line = owned(consumeEnd);
             chunks.append({classifyChunk(line), line});
-            m_buffer.remove(0, consumeEnd);
+            offset += consumeEnd;
             continue;
         }
 
         int nextBoundary = -1;
-        for (int i = 1; i < m_buffer.size(); ++i) {
-            if (looksLikeTextRun(m_buffer, i, false)) {
+        for (int i = 1; i < view.size(); ++i) {
+            if (looksLikeTextRun(view, i, false)) {
                 nextBoundary = i;
                 break;
             }
         }
 
         if (nextBoundary > 0) {
-            chunks.append({StreamChunkKind::Binary, m_buffer.left(nextBoundary)});
-            m_buffer.remove(0, nextBoundary);
+            chunks.append({StreamChunkKind::Binary, owned(nextBoundary)});
+            offset += nextBoundary;
             continue;
         }
 
-        if (isTextLike(m_buffer)) {
-            if (m_buffer.size() > kMaxBufferedTextBytes) {
-                chunks.append({StreamChunkKind::Text, m_buffer});
-                m_buffer.clear();
+        if (isTextLike(view)) {
+            if (view.size() > kMaxBufferedTextBytes) {
+                chunks.append({StreamChunkKind::Text, owned(view.size())});
+                offset = m_buffer.size();
             }
             break;
         }
 
-        chunks.append({StreamChunkKind::Binary, m_buffer});
-        m_buffer.clear();
+        chunks.append({StreamChunkKind::Binary, owned(view.size())});
+        offset = m_buffer.size();
     }
 
+    finish();
     return mergeBinaryChunks(chunks);
 }
 
