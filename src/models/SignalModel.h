@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 
+#include "src/models/SatelliteStore.h"
 #include "src/protocols/GnssTypes.h"
 
 namespace hdgnss {
@@ -31,6 +32,10 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE QVariantList itemsForBand(const QString &band) const;
+    // Binds the model to a shared store (not owned). Without one, the model
+    // uses a private store so setSatellites() still works standalone.
+    void setStore(SatelliteStore *store);
+    SatelliteStore *store() const;
     void setSatellites(const QList<SatelliteInfo> &satellites);
     int revision() const;
 
@@ -39,8 +44,8 @@ signals:
     void revisionChanged();
 
 private:
-    QList<SatelliteInfo> m_satellites;
-    int m_revision = 0;
+    SatelliteStore *m_store = nullptr;
+    SatelliteStore m_ownStore;
 };
 
 }  // namespace hdgnss

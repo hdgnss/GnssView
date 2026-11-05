@@ -19,6 +19,7 @@
 #include "src/models/DeviationMapModel.h"
 #include "src/models/RawLogModel.h"
 #include "src/models/SatelliteModel.h"
+#include "src/models/SatelliteStore.h"
 #include "src/models/SignalModel.h"
 #include "src/protocols/NmeaProtocolPlugin.h"
 #include "src/storage/RawRecorder.h"
@@ -240,6 +241,8 @@ private:
 
     TransportViewModel m_transportViewModel;
     RawLogModel m_rawLogModel;
+    // Shared by both satellite models; holds only the current snapshot.
+    SatelliteStore m_satelliteStore;
     SatelliteModel m_satelliteModel;
     SignalModel m_signalModel;
     CommandButtonModel m_commandButtonModel;

@@ -86,6 +86,7 @@ set(HDGNSS_SOURCES
     src/core/UpdateChecker.cpp
     src/models/RawLogModel.cpp
     src/models/SatelliteModel.cpp
+    src/models/SatelliteStore.cpp
     src/models/SignalModel.cpp
     src/models/CommandButtonModel.cpp
     src/models/DeviationMapModel.cpp
@@ -138,6 +139,7 @@ set(HDGNSS_HEADERS
     include/hdgnss/TecTypes.h
     src/models/RawLogModel.h
     src/models/SatelliteModel.h
+    src/models/SatelliteStore.h
     src/models/SignalModel.h
     src/models/CommandButtonModel.h
     src/models/DeviationMapModel.h
@@ -190,6 +192,7 @@ add_executable(GnssViewRegression
     src/core/UpdateChecker.cpp
     src/models/RawLogModel.cpp
     src/models/SatelliteModel.cpp
+    src/models/SatelliteStore.cpp
     src/models/SignalModel.cpp
     src/models/CommandButtonModel.cpp
     src/models/DeviationMapModel.cpp

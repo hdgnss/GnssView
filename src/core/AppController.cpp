@@ -156,6 +156,8 @@ AppController::AppController(AppSettings *settings, QObject *parent)
     , m_settings(settings)
     , m_tecMapOverlayModel(std::make_unique<TecMapOverlayModel>(settings, this)) {
     m_transportViewModel.setAppSettings(settings);
+    m_satelliteModel.setStore(&m_satelliteStore);
+    m_signalModel.setStore(&m_satelliteStore);
     m_fileSendTimer.setSingleShot(true);
     connect(&m_fileSendTimer, &QTimer::timeout, this, &AppController::sendNextFilePacket);
 
@@ -760,8 +762,7 @@ void AppController::clearUiState() {
     m_satellites.clear();
     m_satelliteLastSeenMs.clear();
     m_rawLogModel.clear();
-    m_satelliteModel.setSatellites({});
-    m_signalModel.setSatellites({});
+    m_satelliteStore.setSatellites({});
     m_deviationMapModel.clear();
     m_lastDeviationSampleUtcTime = {};
     m_lastDeviationSamplePriority = -1;
@@ -1317,6 +1318,12 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
     if (const auto it = fields.constFind(QStringLiteral("satellites")); it != fields.cend()) {
         const QVariantList sats = it.value().toList();
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        // A full snapshot (e.g. NMEA) replaces the cache so satellites it no
+        // longer reports do not linger; partial updates are merged below.
+        if (fields.value(QStringLiteral("satellitesSnapshot")).toBool()) {
+            m_satellites.clear();
+            m_satelliteLastSeenMs.clear();
+        }
         for (const QVariant &value : sats) {
             const QVariantMap satMap = value.toMap();
             SatelliteInfo sat;
@@ -1447,8 +1454,7 @@ void AppController::flushUiRefresh() {
 
 void AppController::refreshSatellites() {
     const QList<SatelliteInfo> satellites = m_satellites.values();
-    m_satelliteModel.setSatellites(satellites);
-    m_signalModel.setSatellites(satellites);
+    m_satelliteStore.setSatellites(satellites);
 }
 
 QVariantMap AppController::streamCountersMap(const QString &transportName, const StreamCounters &counters) const {

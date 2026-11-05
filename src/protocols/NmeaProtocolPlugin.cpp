@@ -542,6 +542,9 @@ QList<ProtocolMessage> NmeaProtocolPlugin::parseSentence(const QByteArray &sente
         pruneSatelliteCache(nowMs);
         message.fields = {
             {QStringLiteral("satellites"), satelliteVariantList()},
+            // satelliteVariantList() is this parser's complete current view, so
+            // consumers should replace (not merge into) their satellite cache.
+            {QStringLiteral("satellitesSnapshot"), true},
             {QStringLiteral("satellitesInView"), rawFields.value(3).toInt()}
         };
         out.append(message);

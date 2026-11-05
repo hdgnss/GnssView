@@ -28,6 +28,7 @@
 #include "src/models/DeviationMapModel.h"
 #include "src/models/RawLogModel.h"
 #include "src/models/SatelliteModel.h"
+#include "src/models/SatelliteStore.h"
 #include "src/models/SignalModel.h"
 #include "src/core/SatelliteCachePruning.h"
 #include "src/protocols/NmeaProtocolPlugin.h"
@@ -239,6 +240,43 @@ bool expectRawRecorderRequiresExplicitLogDirectory() {
                   "raw recorder session should be created under the configured log directory")
         && expect(recorder.bytesRecorded() == 3,
                   "raw recorder should write Rx bytes only, never Tx");
+}
+
+bool expectSatelliteStoreIsIncrementalAndKeepsNoHistory() {
+    auto make = [](const QString &key, int cn0) {
+        hdgnss::SatelliteInfo sat;
+        sat.key = key;
+        sat.constellation = QStringLiteral("GPS");
+        sat.svid = key.toInt();
+        sat.cn0 = cn0;
+        return sat;
+    };
+    hdgnss::SatelliteStore store;
+    SatelliteModel sky;
+    SignalModel sig;
+    sky.setStore(&store);
+    sig.setStore(&store);
+    int resets = 0, inserts = 0, removes = 0, changes = 0;
+    for (QAbstractItemModel *m : {static_cast<QAbstractItemModel *>(&sky), static_cast<QAbstractItemModel *>(&sig)}) {
+        QObject::connect(m, &QAbstractItemModel::modelReset, [&]() { ++resets; });
+        QObject::connect(m, &QAbstractItemModel::rowsInserted, [&]() { ++inserts; });
+        QObject::connect(m, &QAbstractItemModel::rowsRemoved, [&]() { ++removes; });
+        QObject::connect(m, &QAbstractItemModel::dataChanged, [&]() { ++changes; });
+    }
+
+    store.setSatellites({make(QStringLiteral("1"), 30), make(QStringLiteral("2"), 30), make(QStringLiteral("3"), 30)});
+    store.setSatellites({make(QStringLiteral("1"), 40), make(QStringLiteral("3"), 30), make(QStringLiteral("4"), 0)});
+
+    bool noStale = true;
+    for (int i = 0; i < sky.rowCount(); ++i) {
+        noStale = noStale && sky.get(i).value(QStringLiteral("key")).toString() != QStringLiteral("2");
+    }
+    const bool ok = expect(resets == 0, "satellite updates should not reset the models")
+        && expect(inserts == 6 && removes == 2 && changes == 2, "only changed rows should be notified")
+        && expect(sky.rowCount() == 2 && sig.rowCount() == 2, "both models should share the same rows")
+        && expect(noStale, "satellites missing from the latest snapshot must be dropped");
+    store.setSatellites({});
+    return ok && expect(sky.rowCount() == 0 && sig.rowCount() == 0, "empty snapshot should leave no history");
 }
 
 bool expectSatelliteCachePruning() {
@@ -831,6 +869,36 @@ bool expectAppControllerMergesSatelliteUpdates() {
         && expect(controller.signalModel()->rowCount() == 3, "signal model should retain merged satellites");
 }
 
+bool expectSatelliteSnapshotReplacesCache() {
+    AppSettings settings;
+    AppController controller(&settings);
+
+    ProtocolMessage first;
+    first.fields = {
+        {QStringLiteral("satellites"), QVariantList{
+            satellite(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 42),
+            satellite(QStringLiteral("GPS"), QStringLiteral("L1"), 2, 38)
+        }},
+        {QStringLiteral("satellitesSnapshot"), true}
+    };
+    ProtocolMessage second;
+    second.fields = {
+        {QStringLiteral("satellites"), QVariantList{
+            satellite(QStringLiteral("GPS"), QStringLiteral("L1"), 2, 39)
+        }},
+        {QStringLiteral("satellitesSnapshot"), true}
+    };
+
+    controller.regressionApplyProtocolMessage(first);
+    controller.regressionApplyProtocolMessage(second);
+    controller.regressionFlushUiRefresh();
+
+    return expect(controller.regressionSatelliteCacheSize() == 1,
+                  "a full satellite snapshot should replace the controller cache")
+        && expect(controller.satelliteModel()->rowCount() == 1 && controller.signalModel()->rowCount() == 1,
+                  "models should not keep satellites missing from the latest snapshot");
+}
+
 bool expectZeroSnrSatellitesStayOutOfInViewDisplay() {
     AppSettings settings;
     AppController controller(&settings);
@@ -1253,6 +1321,12 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     if (!expectRawRecorderRequiresExplicitLogDirectory()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectSatelliteSnapshotReplacesCache()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectSatelliteStoreIsIncrementalAndKeepsNoHistory()) {
         return EXIT_FAILURE;
     }
     if (!expectSatelliteCachePruning()) {

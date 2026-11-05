@@ -3,17 +3,19 @@
 namespace hdgnss {
 
 SatelliteModel::SatelliteModel(QObject *parent)
-    : QAbstractListModel(parent) {}
+    : QAbstractListModel(parent) {
+    setStore(&m_ownStore);
+}
 
 int SatelliteModel::rowCount(const QModelIndex &parent) const {
-    return parent.isValid() ? 0 : m_satellites.size();
+    return parent.isValid() ? 0 : m_store->size();
 }
 
 QVariant SatelliteModel::data(const QModelIndex &index, int role) const {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_satellites.size()) {
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_store->size()) {
         return {};
     }
-    const SatelliteInfo &sat = m_satellites.at(index.row());
+    const SatelliteInfo &sat = m_store->at(index.row());
     switch (role) {
     case KeyRole: return sat.key;
     case ConstellationRole: return sat.constellation;
@@ -45,10 +47,10 @@ QHash<int, QByteArray> SatelliteModel::roleNames() const {
 }
 
 QVariantMap SatelliteModel::get(int row) const {
-    if (row < 0 || row >= m_satellites.size()) {
+    if (row < 0 || row >= m_store->size()) {
         return {};
     }
-    const SatelliteInfo &sat = m_satellites.at(row);
+    const SatelliteInfo &sat = m_store->at(row);
     return {
         {QStringLiteral("key"), sat.key},
         {QStringLiteral("constellation"), sat.constellation},
@@ -63,23 +65,50 @@ QVariantMap SatelliteModel::get(int row) const {
     };
 }
 
-void SatelliteModel::setSatellites(const QList<SatelliteInfo> &satellites) {
-    beginResetModel();
-    m_satellites.clear();
-    m_satellites.reserve(satellites.size());
-    for (const SatelliteInfo &sat : satellites) {
-        if (satelliteHasVisibleSignal(sat)) {
-            m_satellites.append(sat);
-        }
+void SatelliteModel::setStore(SatelliteStore *store) {
+    SatelliteStore *target = store ? store : &m_ownStore;
+    if (target == m_store) {
+        return;
     }
+    beginResetModel();
+    if (m_store) {
+        disconnect(m_store, nullptr, this, nullptr);
+    }
+    m_store = target;
+    connect(m_store, &SatelliteStore::aboutToInsert, this, [this](int row) {
+        beginInsertRows({}, row, row);
+    });
+    connect(m_store, &SatelliteStore::inserted, this, [this]() {
+        endInsertRows();
+        emit countChanged();
+    });
+    connect(m_store, &SatelliteStore::aboutToRemove, this, [this](int row) {
+        beginRemoveRows({}, row, row);
+    });
+    connect(m_store, &SatelliteStore::removed, this, [this]() {
+        endRemoveRows();
+        emit countChanged();
+    });
+    connect(m_store, &SatelliteStore::changed, this, [this](int row) {
+        const QModelIndex idx = index(row);
+        emit dataChanged(idx, idx);
+    });
+    connect(m_store, &SatelliteStore::revisionChanged, this, &SatelliteModel::revisionChanged);
     endResetModel();
-    ++m_revision;
     emit countChanged();
     emit revisionChanged();
 }
 
+SatelliteStore *SatelliteModel::store() const {
+    return m_store;
+}
+
+void SatelliteModel::setSatellites(const QList<SatelliteInfo> &satellites) {
+    m_store->setSatellites(satellites);
+}
+
 int SatelliteModel::revision() const {
-    return m_revision;
+    return m_store->revision();
 }
 
 }  // namespace hdgnss
