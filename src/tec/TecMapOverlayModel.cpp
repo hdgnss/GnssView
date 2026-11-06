@@ -9,7 +9,9 @@
 #include <QMetaType>
 #include <QPainterPath>
 #include <QPointF>
+#include <QPointer>
 #include <QStandardPaths>
+#include <QThreadPool>
 #include <limits>
 
 #include "hdgnss/IConfigurablePlugin.h"
@@ -261,22 +263,14 @@ QVariantMap TecMapOverlayModel::sampleAtCanvasPoint(qreal x,
     int bestIndex = -1;
     double bestDistanceSquared = std::numeric_limits<double>::max();
 
+    const double maxCellExtentPx = std::max(
+        24.0,
+        std::hypot((lonHalfStep * 2.0) / 360.0 * width,
+                   (latHalfStep * 2.0) / 180.0 * height) * 1.5);
+    const double maxCellExtentSq = maxCellExtentPx * maxCellExtentPx;
+
     for (int i = 0; i < dataset.samples.size(); ++i) {
         const TecSample &sample = dataset.samples.at(i);
-        const double lonMin = clamp(sample.longitude - lonHalfStep, -180.0, 180.0);
-        const double lonMax = clamp(sample.longitude + lonHalfStep, -180.0, 180.0);
-        const double latMin = clamp(sample.latitude - latHalfStep, -90.0, 90.0);
-        const double latMax = clamp(sample.latitude + latHalfStep, -90.0, 90.0);
-        if (lonMax <= lonMin || latMax <= latMin) {
-            continue;
-        }
-
-        const QPainterPath path = cellPath(width, height, lonMin, lonMax, latMin, latMax);
-        if (!path.isEmpty() && path.contains(clickPoint)) {
-            bestIndex = i;
-            break;
-        }
-
         const QPointF samplePoint = projectedCanvasPoint(width, height, sample.longitude, sample.latitude);
         if (!std::isfinite(samplePoint.x()) || !std::isfinite(samplePoint.y())) {
             continue;
@@ -288,6 +282,24 @@ QVariantMap TecMapOverlayModel::sampleAtCanvasPoint(qreal x,
         if (distanceSquared < bestDistanceSquared) {
             bestDistanceSquared = distanceSquared;
             bestIndex = i;
+        }
+        if (distanceSquared > maxCellExtentSq) {
+            continue;
+        }
+
+        const double lonMin = clamp(sample.longitude - lonHalfStep, -180.0, 180.0);
+        const double lonMax = clamp(sample.longitude + lonHalfStep, -180.0, 180.0);
+        const double latMin = clamp(sample.latitude - latHalfStep, -90.0, 90.0);
+        const double latMax = clamp(sample.latitude + latHalfStep, -90.0, 90.0);
+        if (lonMax <= lonMin || latMax <= latMin) {
+            continue;
+        }
+
+        const QPainterPath path = cellPath(width, height, lonMin, lonMax, latMin, latMax);
+        if (!path.isEmpty() && path.contains(clickPoint)) {
+            bestIndex = i;
+            bestDistanceSquared = 0.0;
+            break;
         }
     }
 
@@ -805,6 +817,7 @@ void TecMapOverlayModel::clearOverlay(int index) {
     if (index < 0 || index >= m_sources.size()) {
         return;
     }
+    ++m_sources[index].renderGeneration;
     if (!m_sources[index].overlayPath.isEmpty()) {
         QFile::remove(m_sources[index].overlayPath);
         m_sources[index].overlayPath.clear();
@@ -826,42 +839,87 @@ void TecMapOverlayModel::renderDataset(int index, const TecGridData &dataset) {
         return;
     }
 
-    const QImage image = TecMapRenderer::render(dataset);
+    SourceState &source = m_sources[index];
+    const qint64 renderToken = ++source.renderGeneration;
+    const qint64 fileRevision = ++m_revision;
+    const QString pluginId = source.pluginId;
+    source.datasetTimestampUtc = dataset.timestampUtc.toUTC();
+    source.dataset = dataset;
+    updateDatasetLabel(index);
+
     const QString filePath = QDir(directoryPath).filePath(
         QStringLiteral("tec-%1-%2-%3.png")
             .arg(dataset.sourceId.isEmpty() ? QStringLiteral("overlay") : dataset.sourceId)
             .arg(dataset.timestampUtc.toUTC().toString(QStringLiteral("yyyyMMddTHHmmss")))
-            .arg(++m_revision));
-    if (!image.save(filePath)) {
-        setSourceStatusText(index, QStringLiteral("TEC overlay image could not be written"));
-        applyActiveSourceState();
-        rebuildDescriptors();
-        return;
-    }
+            .arg(fileRevision));
 
-    if (!m_sources[index].overlayPath.isEmpty() && m_sources[index].overlayPath != filePath) {
-        QFile::remove(m_sources[index].overlayPath);
-    }
+    QPointer<TecMapOverlayModel> weakSelf(this);
+    QThreadPool::globalInstance()->start([weakSelf, pluginId, renderToken, filePath, dataset]() {
+        const QImage image = TecMapRenderer::render(dataset);
+        const bool saved = !image.isNull() && image.save(filePath);
+        if (!weakSelf) {
+            if (saved) {
+                QFile::remove(filePath);
+            }
+            return;
+        }
 
-    m_sources[index].overlayPath = filePath;
-    m_sources[index].overlaySource = QUrl::fromLocalFile(filePath);
-    m_sources[index].datasetTimestampUtc = dataset.timestampUtc.toUTC();
-    m_sources[index].dataset = dataset;
-    updateDatasetLabel(index);
+        QMetaObject::invokeMethod(weakSelf.data(), [weakSelf, pluginId, renderToken, filePath, saved, dataset]() {
+            if (!weakSelf) {
+                if (saved) {
+                    QFile::remove(filePath);
+                }
+                return;
+            }
 
-    if (dataset.fromCache) {
-        setSourceStatusText(index,
-                            dataset.stale
-                                ? (dataset.availabilityNote.isEmpty()
-                                       ? QStringLiteral("Using stale cached %1").arg(m_sources.at(index).displayName)
-                                       : dataset.availabilityNote)
-                                : QStringLiteral("Using cached %1").arg(m_sources.at(index).displayName));
-    } else {
-        setSourceStatusText(index, QStringLiteral("%1 ready").arg(m_sources.at(index).displayName));
-    }
+            int targetIndex = -1;
+            for (int i = 0; i < weakSelf->m_sources.size(); ++i) {
+                if (weakSelf->m_sources.at(i).pluginId == pluginId) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+            if (targetIndex < 0 || weakSelf->m_sources.at(targetIndex).renderGeneration != renderToken) {
+                if (saved) {
+                    QFile::remove(filePath);
+                }
+                return;
+            }
 
-    applyActiveSourceState();
-    rebuildDescriptors();
+            if (!saved) {
+                weakSelf->setSourceStatusText(targetIndex, QStringLiteral("TEC overlay image could not be written"));
+                weakSelf->applyActiveSourceState();
+                weakSelf->rebuildDescriptors();
+                return;
+            }
+
+            SourceState &targetSource = weakSelf->m_sources[targetIndex];
+            if (!targetSource.overlayPath.isEmpty() && targetSource.overlayPath != filePath) {
+                QFile::remove(targetSource.overlayPath);
+            }
+
+            targetSource.overlayPath = filePath;
+            targetSource.overlaySource = QUrl::fromLocalFile(filePath);
+            targetSource.datasetTimestampUtc = dataset.timestampUtc.toUTC();
+            targetSource.dataset = dataset;
+            weakSelf->updateDatasetLabel(targetIndex);
+
+            if (dataset.fromCache) {
+                weakSelf->setSourceStatusText(
+                    targetIndex,
+                    dataset.stale
+                        ? (dataset.availabilityNote.isEmpty()
+                               ? QStringLiteral("Using stale cached %1").arg(targetSource.displayName)
+                               : dataset.availabilityNote)
+                        : QStringLiteral("Using cached %1").arg(targetSource.displayName));
+            } else {
+                weakSelf->setSourceStatusText(targetIndex, QStringLiteral("%1 ready").arg(targetSource.displayName));
+            }
+
+            weakSelf->applyActiveSourceState();
+            weakSelf->rebuildDescriptors();
+        }, Qt::QueuedConnection);
+    });
 }
 
 }  // namespace hdgnss

@@ -117,25 +117,6 @@ QVariantMap automationPluginDescriptor(IAutomationPlugin *plugin,
     return descriptor;
 }
 
-bool hasHttpFileScheme(const QString &payload) {
-    const QString trimmed = payload.trimmed();
-    return trimmed.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive)
-        || trimmed.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive);
-}
-
-bool parseHttpFileUrl(const QString &payload, QUrl *urlOut) {
-    const QString trimmed = payload.trimmed();
-    const QUrl url(trimmed);
-    if (!url.isValid() || url.host().isEmpty()) {
-        return false;
-    }
-
-    if (urlOut) {
-        *urlOut = url;
-    }
-    return true;
-}
-
 bool isLocationQualityMessage(const ProtocolMessage &message) {
     return message.fields.contains(QStringLiteral("quality"))
         && message.fields.contains(QStringLiteral("validFix"));
@@ -165,12 +146,19 @@ QDateTime locationUtcTime(const ProtocolMessage &message, const QDateTime &curre
 AppController::AppController(AppSettings *settings, QObject *parent)
     : QObject(parent)
     , m_settings(settings)
-    , m_tecMapOverlayModel(std::make_unique<TecMapOverlayModel>(settings, this)) {
+    , m_tecMapOverlayModel(std::make_unique<TecMapOverlayModel>(settings, this))
+    , m_fileCommandSender(std::make_unique<FileCommandSender>(
+          &m_transportViewModel,
+          [this](const QString &protocolName) { return findProtocolPlugin(protocolName); },
+          this)) {
     m_transportViewModel.setAppSettings(settings);
     m_satelliteModel.setStore(&m_satelliteStore);
     m_signalModel.setStore(&m_satelliteStore);
-    m_fileSendTimer.setSingleShot(true);
-    connect(&m_fileSendTimer, &QTimer::timeout, this, &AppController::sendNextFilePacket);
+    connect(m_fileCommandSender.get(), &FileCommandSender::statusMessage, this, &AppController::statusMessage);
+    connect(m_fileCommandSender.get(), &FileCommandSender::packetTransmitted, this,
+            [this](const QString &transportName, const QByteArray &packet) {
+                handleIncomingBytes(transportName, packet, DataDirection::Tx);
+            });
 
     connect(&m_rawRecorder, &RawRecorder::writeFailed, this, &AppController::statusMessage);
     m_uiRefreshTimer.setSingleShot(true);
@@ -231,7 +219,9 @@ AppController::AppController(AppSettings *settings, QObject *parent)
 
 AppController::~AppController() {
     m_shuttingDown = true;
-    m_fileSendTimer.stop();
+    if (m_fileCommandSender) {
+        m_fileCommandSender->stop();
+    }
     for (ITransport *transport : m_transportViewModel.allTransports()) {
         disconnect(transport, nullptr, this, nullptr);
     }
@@ -476,15 +466,7 @@ QVariantList AppController::protocolBuildMessages() const {
 }
 
 QVariantList AppController::protocolInfoTabs() const {
-    QVariantList tabs;
-    tabs.reserve(m_protocolInfoPanels.size());
-    for (const ProtocolInfoPanelState &panel : m_protocolInfoPanels) {
-        tabs.append(QVariantMap{
-            {QStringLiteral("id"), panel.definition.id},
-            {QStringLiteral("tabTitle"), panel.definition.tabTitle}
-        });
-    }
-    return tabs;
+    return m_protocolInfoStore.tabs();
 }
 
 QVariantList AppController::availableProtocolPlugins() const {
@@ -531,12 +513,7 @@ QVariantMap AppController::protocolBuildMessageDefinition(const QString &protoco
 }
 
 QVariantMap AppController::protocolInfoPanel(const QString &panelId) const {
-    for (const ProtocolInfoPanelState &panel : m_protocolInfoPanels) {
-        if (panel.definition.id == panelId) {
-            return protocolInfoPanelMap(panel);
-        }
-    }
-    return {};
+    return m_protocolInfoStore.panel(panelId);
 }
 
 void AppController::sendBytes(const QByteArray &bytes, const QString &target) {
@@ -604,10 +581,12 @@ void AppController::triggerButton(int row) {
     }
     const QString contentType = button.value(QStringLiteral("contentType")).toString();
     if (contentType.compare(QStringLiteral("FILE"), Qt::CaseInsensitive) == 0) {
-        sendFileCommand(button.value(QStringLiteral("payload")).toString(),
-                        button.value(QStringLiteral("fileDecoder"), QStringLiteral("None")).toString(),
-                        QStringLiteral("Default"),
-                        button.value(QStringLiteral("filePacketIntervalMs"), 0).toInt());
+        if (m_fileCommandSender) {
+            m_fileCommandSender->sendFile(button.value(QStringLiteral("payload")).toString(),
+                                          button.value(QStringLiteral("fileDecoder"), QStringLiteral("None")).toString(),
+                                          QStringLiteral("Default"),
+                                          button.value(QStringLiteral("filePacketIntervalMs"), 0).toInt());
+        }
         return;
     }
     if (contentType.compare(QStringLiteral("Plugin"), Qt::CaseInsensitive) == 0) {
@@ -774,9 +753,7 @@ void AppController::clearUiState() {
     m_deviationMapModel.clear();
     m_lastDeviationSampleUtcTime = {};
     m_lastDeviationSamplePriority = -1;
-    for (ProtocolInfoPanelState &panel : m_protocolInfoPanels) {
-        panel.values.clear();
-    }
+    m_protocolInfoStore.clearValues();
     m_locationDirty = false;
     m_diagnosticsDirty = false;
     m_protocolInfoDirty = false;
@@ -796,7 +773,7 @@ void AppController::reloadProtocolPlugins() {
     m_availableProtocolPlugins.clear();
     m_protocolPluginLoadErrors.clear();
     m_protocolPluginSearchPaths.clear();
-    m_protocolInfoPanels.clear();
+    m_protocolInfoStore.clear();
     m_fileSendDecoders = {QStringLiteral("None")};
     m_protocolBuildMessages.clear();
     m_protocolBuildMessageDefinitions.clear();
@@ -1051,210 +1028,8 @@ void AppController::registerProtocolPlugin(IProtocolPlugin &plugin) {
     }
 }
 
-bool AppController::sendFileCommand(const QString &filePath, const QString &decoderName, const QString &target, int packetIntervalMs) {
-    const QString source = filePath.trimmed();
-    QUrl fileUrl;
-    if (hasHttpFileScheme(source)) {
-        if (!parseHttpFileUrl(source, &fileUrl)) {
-            emit statusMessage(QStringLiteral("Invalid file URL: %1").arg(source));
-            return false;
-        }
-        downloadFileCommand(fileUrl, decoderName, target, packetIntervalMs);
-        return true;
-    }
-
-    QFile file(source);
-    if (!file.open(QIODevice::ReadOnly)) {
-        emit statusMessage(QStringLiteral("Failed to open file: %1").arg(source));
-        return false;
-    }
-
-    const QByteArray fileBytes = file.readAll();
-    return queueFileBytesForSend(fileBytes, source, decoderName, target, packetIntervalMs);
-}
-
-bool AppController::queueFileBytesForSend(const QByteArray &fileBytes,
-                                          const QString &sourceLabel,
-                                          const QString &decoderName,
-                                          const QString &target,
-                                          int packetIntervalMs) {
-    if (fileBytes.isEmpty()) {
-        emit statusMessage(QStringLiteral("File is empty: %1").arg(sourceLabel));
-        return false;
-    }
-
-    QList<QByteArray> packets;
-    const QString trimmedDecoder = decoderName.trimmed();
-    if (!trimmedDecoder.isEmpty() && trimmedDecoder.compare(QStringLiteral("None"), Qt::CaseInsensitive) != 0) {
-        IProtocolPlugin *decoderPlugin = findProtocolPlugin(trimmedDecoder);
-        if (!decoderPlugin) {
-            emit statusMessage(QStringLiteral("File decoder not available: %1").arg(trimmedDecoder));
-            return false;
-        }
-        QString packetizeError;
-        packets = decoderPlugin->packetizeFile(fileBytes, &packetizeError);
-        if (packets.isEmpty()) {
-            emit statusMessage(QStringLiteral("Failed to packetize file %1: %2")
-                                   .arg(sourceLabel,
-                                        packetizeError.isEmpty() ? QStringLiteral("No payload to send") : packetizeError));
-            return false;
-        }
-    } else {
-        QString packetizeError;
-        packets = FilePacketizer::packetize(fileBytes, &packetizeError);
-        if (packets.isEmpty()) {
-            emit statusMessage(QStringLiteral("Failed to packetize file %1: %2")
-                                   .arg(sourceLabel,
-                                        packetizeError.isEmpty() ? QStringLiteral("No payload to send") : packetizeError));
-            return false;
-        }
-    }
-
-    const QString resolvedTarget = (target == QStringLiteral("Active") || target == QStringLiteral("Default"))
-        ? m_transportViewModel.activeTransport()
-        : target;
-
-    FileSendJob job;
-    job.filePath = sourceLabel;
-    job.decoderName = decoderName;
-    job.resolvedTarget = resolvedTarget;
-    job.packets = packets;
-    job.packetIntervalMs = qMax(0, packetIntervalMs);
-
-    const bool alreadyBusy = m_activeFileSendJob.has_value() || !m_fileSendQueue.isEmpty() || m_fileSendTimer.isActive();
-    m_fileSendQueue.append(job);
-
-    if (alreadyBusy) {
-        emit statusMessage(QStringLiteral("Queued file send: %1 (%2 packet(s), %3 ms interval)")
-                               .arg(sourceLabel)
-                               .arg(packets.size())
-                               .arg(job.packetIntervalMs));
-    } else {
-        startNextFileSendJob();
-    }
-    return true;
-}
-
-void AppController::downloadFileCommand(const QUrl &url, const QString &decoderName, const QString &target, int packetIntervalMs) {
-    const QString sourceLabel = url.toDisplayString();
-    emit statusMessage(QStringLiteral("Downloading file: %1").arg(sourceLabel));
-
-    QNetworkRequest request(url);
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setRawHeader("User-Agent", "GnssView");
-    request.setTransferTimeout(30000);
-
-    QNetworkReply *reply = m_fileDownloadManager.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, url, decoderName, target, packetIntervalMs]() {
-        handleFileDownloadFinished(reply, url, decoderName, target, packetIntervalMs);
-    });
-}
-
-void AppController::handleFileDownloadFinished(QNetworkReply *reply,
-                                               const QUrl &sourceUrl,
-                                               const QString &decoderName,
-                                               const QString &target,
-                                               int packetIntervalMs) {
-    reply->deleteLater();
-
-    const QString sourceLabel = sourceUrl.toDisplayString();
-    if (reply->error() != QNetworkReply::NoError) {
-        emit statusMessage(QStringLiteral("Failed to download file %1: %2")
-                               .arg(sourceLabel, reply->errorString()));
-        return;
-    }
-
-    const QByteArray fileBytes = reply->readAll();
-    emit statusMessage(QStringLiteral("Downloaded file: %1 (%2 bytes)")
-                           .arg(sourceLabel)
-                           .arg(fileBytes.size()));
-    queueFileBytesForSend(fileBytes, sourceLabel, decoderName, target, packetIntervalMs);
-}
-
-void AppController::startNextFileSendJob() {
-    if (m_activeFileSendJob.has_value() || m_fileSendQueue.isEmpty()) {
-        return;
-    }
-
-    m_activeFileSendJob = m_fileSendQueue.takeFirst();
-    const FileSendJob &job = *m_activeFileSendJob;
-    emit statusMessage(QStringLiteral("Sending %1 packet(s) from %2 via %3 with %4 ms interval")
-                           .arg(job.packets.size())
-                           .arg(job.filePath)
-                           .arg(job.resolvedTarget)
-                           .arg(job.packetIntervalMs));
-    sendNextFilePacket();
-}
-
-void AppController::sendNextFilePacket() {
-    if (!m_activeFileSendJob.has_value()) {
-        startNextFileSendJob();
-        return;
-    }
-
-    FileSendJob &job = *m_activeFileSendJob;
-    if (job.nextPacketIndex >= job.packets.size()) {
-        emit statusMessage(QStringLiteral("Sent %1 packet(s) from %2 via %3")
-                               .arg(job.packets.size())
-                               .arg(job.filePath)
-                               .arg(job.resolvedTarget));
-        m_activeFileSendJob.reset();
-        startNextFileSendJob();
-        return;
-    }
-
-    const QByteArray &packet = job.packets.at(job.nextPacketIndex);
-    if (!m_transportViewModel.send(packet, job.resolvedTarget)) {
-        emit statusMessage(QStringLiteral("Failed to send file packet %1/%2 through %3")
-                               .arg(job.nextPacketIndex + 1)
-                               .arg(job.packets.size())
-                               .arg(job.resolvedTarget));
-        m_activeFileSendJob.reset();
-        startNextFileSendJob();
-        return;
-    }
-
-    handleIncomingBytes(job.resolvedTarget, packet, DataDirection::Tx);
-    ++job.nextPacketIndex;
-
-    if (job.nextPacketIndex >= job.packets.size()) {
-        emit statusMessage(QStringLiteral("Sent %1 packet(s) from %2 via %3")
-                               .arg(job.packets.size())
-                               .arg(job.filePath)
-                               .arg(job.resolvedTarget));
-        m_activeFileSendJob.reset();
-        startNextFileSendJob();
-        return;
-    }
-
-    m_fileSendTimer.start(job.packetIntervalMs);
-}
-
 void AppController::registerProtocolInfoPanels(const QList<ProtocolInfoPanel> &panels) {
-    bool changed = false;
-    for (const ProtocolInfoPanel &panel : panels) {
-        if (panel.id.isEmpty() || panel.fields.isEmpty()) {
-            continue;
-        }
-
-        bool exists = false;
-        for (const ProtocolInfoPanelState &state : m_protocolInfoPanels) {
-            if (state.definition.id == panel.id) {
-                exists = true;
-                break;
-            }
-        }
-        if (exists) {
-            continue;
-        }
-
-        ProtocolInfoPanelState state;
-        state.definition = panel;
-        m_protocolInfoPanels.append(state);
-        changed = true;
-    }
-
-    if (changed) {
+    if (m_protocolInfoStore.registerPanels(panels)) {
         emit protocolInfoTabsChanged();
         emit protocolInfoPanelsChanged();
     }
@@ -1344,7 +1119,6 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
             target = it.value().toDouble();
         }
     };
-    bool protocolInfoChanged = false;
 
     if (const auto it = fields.constFind(QStringLiteral("validFix")); it != fields.cend()) {
         m_location.validFix = it.value().toBool();
@@ -1423,42 +1197,7 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
         m_satellitesDirty = true;
     }
 
-    const auto panelTargetIt = fields.constFind(QStringLiteral("infoPanelId"));
-    const QString panelTargetId = panelTargetIt == fields.cend()
-        ? QString()
-        : panelTargetIt.value().toString();
-    for (ProtocolInfoPanelState &panel : m_protocolInfoPanels) {
-        if (!panelTargetId.isEmpty() && panel.definition.id != panelTargetId) {
-            continue;
-        }
-        if (panelTargetId.isEmpty()
-            && !panel.definition.protocol.isEmpty()
-            && panel.definition.protocol != message.protocol) {
-            continue;
-        }
-        bool matchedAnyField = false;
-        bool panelChanged = false;
-        for (const ProtocolInfoField &field : panel.definition.fields) {
-            const auto valueIt = fields.constFind(field.valueKey);
-            if (valueIt == fields.cend()) {
-                continue;
-            }
-            if (!matchedAnyField && panel.definition.replaceOnMessage && !panel.values.isEmpty()) {
-                panel.values.clear();
-                panelChanged = true;
-            }
-            matchedAnyField = true;
-            const QVariant newValue = valueIt.value();
-            if (panel.values.value(field.id) != newValue) {
-                panel.values.insert(field.id, newValue);
-                panelChanged = true;
-            }
-        }
-        if (!matchedAnyField) {
-            continue;
-        }
-        protocolInfoChanged = protocolInfoChanged || panelChanged;
-    }
+    const bool protocolInfoChanged = m_protocolInfoStore.applyMessage(message);
 
     m_locationDirty = true;
     if (hasUtcTimeField && m_tecMapOverlayModel) {
@@ -1561,56 +1300,6 @@ int AppController::deviationSamplePriority(const QString &messageName) {
         return 1;
     }
     return 0;
-}
-
-QVariantMap AppController::protocolInfoPanelMap(const ProtocolInfoPanelState &panel) const {
-    return {
-        {QStringLiteral("id"), panel.definition.id},
-        {QStringLiteral("protocol"), panel.definition.protocol},
-        {QStringLiteral("tabTitle"), panel.definition.tabTitle},
-        {QStringLiteral("title"), panel.definition.title},
-        {QStringLiteral("items"), protocolInfoPanelItems(panel)}
-    };
-}
-
-QVariantList AppController::protocolInfoPanelItems(const ProtocolInfoPanelState &panel) const {
-    QVariantList items;
-    items.reserve(panel.definition.fields.size());
-    for (const ProtocolInfoField &field : panel.definition.fields) {
-        items.append(QVariantMap{
-            {QStringLiteral("id"), field.id},
-            {QStringLiteral("label"), field.label},
-            {QStringLiteral("group"), field.group},
-            {QStringLiteral("semanticRole"), field.semanticRole},
-            {QStringLiteral("value"), panel.values.value(field.id)},
-            {QStringLiteral("valueText"), formatProtocolInfoValue(field, panel.values.value(field.id))},
-            {QStringLiteral("emphasize"), field.emphasize}
-        });
-    }
-    return items;
-}
-
-QString AppController::formatProtocolInfoValue(const ProtocolInfoField &field, const QVariant &value) const {
-    if (!value.isValid() || value.isNull()) {
-        return field.fallbackText;
-    }
-
-    QString rendered;
-    if (value.metaType().id() == QMetaType::Bool) {
-        rendered = value.toBool() ? QStringLiteral("Yes") : QStringLiteral("No");
-    } else if (field.precision >= 0 && value.canConvert<double>()) {
-        rendered = QString::number(value.toDouble(), 'f', field.precision);
-    } else {
-        rendered = value.toString();
-    }
-
-    if (rendered.isEmpty()) {
-        return field.fallbackText;
-    }
-    if (!field.unit.isEmpty()) {
-        rendered += QStringLiteral(" ") + field.unit;
-    }
-    return rendered;
 }
 
 QString AppController::signalUsageText(const QString &group) const {

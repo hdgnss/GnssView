@@ -1543,6 +1543,105 @@ bool expectDeviationMapCanvasPointsDeduplicationAndThrottling() {
                   "flushUiRefresh should emit a single coalesced DeviationMapModel update for the burst");
 }
 
+bool expectProtocolInfoStoreAndAsyncRawRecorder() {
+    hdgnss::ProtocolInfoStore infoStore;
+    hdgnss::ProtocolInfoPanel panel;
+    panel.id = QStringLiteral("test-panel");
+    panel.protocol = QStringLiteral("TEST");
+    panel.tabTitle = QStringLiteral("Test Tab");
+    panel.title = QStringLiteral("Test Panel");
+    panel.replaceOnMessage = false;
+
+    hdgnss::ProtocolInfoField boolField;
+    boolField.id = QStringLiteral("locked");
+    boolField.label = QStringLiteral("Locked");
+    boolField.valueKey = QStringLiteral("locked");
+    boolField.fallbackText = QStringLiteral("--");
+
+    hdgnss::ProtocolInfoField floatField;
+    floatField.id = QStringLiteral("bias");
+    floatField.label = QStringLiteral("Clock Bias");
+    floatField.valueKey = QStringLiteral("biasNs");
+    floatField.unit = QStringLiteral("ns");
+    floatField.precision = 2;
+    floatField.fallbackText = QStringLiteral("--");
+
+    panel.fields = {boolField, floatField};
+
+    if (!expect(infoStore.registerPanels({panel}), "ProtocolInfoStore should register a new panel")
+        || !expect(!infoStore.registerPanels({panel}), "ProtocolInfoStore should ignore duplicate panel registration")
+        || !expect(infoStore.tabs().size() == 1, "ProtocolInfoStore should expose registered tab")) {
+        return false;
+    }
+
+    ProtocolMessage msg;
+    msg.protocol = QStringLiteral("TEST");
+    msg.messageName = QStringLiteral("STATUS");
+    msg.fields = {
+        {QStringLiteral("locked"), true},
+        {QStringLiteral("biasNs"), 12.3456}
+    };
+
+    if (!expect(infoStore.applyMessage(msg), "ProtocolInfoStore should report changed when field values update")
+        || !expect(!infoStore.applyMessage(msg), "ProtocolInfoStore should not report changed when identical values arrive")) {
+        return false;
+    }
+
+    const QVariantList items = infoStore.panel(QStringLiteral("test-panel")).value(QStringLiteral("items")).toList();
+    if (!expect(items.size() == 2, "ProtocolInfoStore panel should expose 2 formatted items")
+        || !expect(items.at(0).toMap().value(QStringLiteral("valueText")).toString() == QStringLiteral("Yes"),
+                   "Bool field should format to Yes")
+        || !expect(items.at(1).toMap().value(QStringLiteral("valueText")).toString() == QStringLiteral("12.35 ns"),
+                   "Numeric field with precision 2 and unit should format accurately")) {
+        return false;
+    }
+
+    // Verify async RawRecorder writes both raw binary and decode log entries on background worker.
+    QTemporaryDir tempDir;
+    if (!expect(tempDir.isValid(), "temporary directory for async RawRecorder test should be valid")) {
+        return false;
+    }
+
+    RawRecorder recorder;
+    recorder.setLogRootDirectory(tempDir.path());
+    recorder.setRecordRawEnabled(true);
+    recorder.setRecordDecodeEnabled(true);
+    const QDateTime openedAt = QDateTime::fromString(QStringLiteral("2026-04-27T01:02:03.456Z"), Qt::ISODateWithMs);
+    recorder.startSession(QStringLiteral("async"), openedAt, QStringLiteral("test"));
+
+    for (int i = 0; i < 50; ++i) {
+        RawLogEntry rawEntry;
+        rawEntry.timestampUtc = openedAt.addMSecs(i);
+        rawEntry.direction = hdgnss::DataDirection::Rx;
+        rawEntry.payload = QByteArrayLiteral("$GPGGA*00\r\n");
+        recorder.recordRaw(rawEntry);
+
+        hdgnss::StreamChunk chunk{hdgnss::StreamChunkKind::Binary, QByteArrayLiteral("\xF1\xD9\x01\x02")};
+        recorder.recordChunk(rawEntry.timestampUtc,
+                             hdgnss::DataDirection::Rx,
+                             chunk,
+                             {QStringLiteral("MON-VER: v1.0")});
+    }
+
+    recorder.flush();
+
+    QFile binFile(recorder.binaryFilePath());
+    QFile logFile(recorder.logFilePath());
+    if (!expect(binFile.open(QIODevice::ReadOnly), "async RawRecorder binary file should open")
+        || !expect(logFile.open(QIODevice::ReadOnly), "async RawRecorder decode log file should open")) {
+        return false;
+    }
+
+    const QByteArray binBytes = binFile.readAll();
+    const QByteArray logBytes = logFile.readAll();
+    return expect(recorder.bytesRecorded() == 50 * 11 && binBytes.size() == 50 * 11,
+                  "async RawRecorder should flush all 50 raw binary frames")
+        && expect(recorder.entriesRecorded() == 100,
+                  "async RawRecorder should record 2 log entries (HEX + DEC) per binary chunk")
+        && expect(logBytes.contains("HEX:  F1 D9 01 02") && logBytes.contains("DEC:  MON-VER: v1.0"),
+                  "async RawRecorder log file should contain formatted HEX and DEC lines");
+}
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -1656,6 +1755,9 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     if (!expectDeviationMapCanvasPointsDeduplicationAndThrottling()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectProtocolInfoStoreAndAsyncRawRecorder()) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

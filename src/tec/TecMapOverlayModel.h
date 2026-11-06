@@ -89,6 +89,7 @@ private:
         QString overlayPath;
         QString statusText = QStringLiteral("TEC waiting for GNSS UTC time");
         QString datasetLabel = QStringLiteral("TEC unavailable");
+        qint64 renderGeneration = 0;
         bool loading = false;
     };
 

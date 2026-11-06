@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <QBrush>
 #include <QColor>
@@ -72,23 +73,39 @@ QPointF projectedCanvasPoint(int width, int height, double lonDeg, double latDeg
     };
 }
 
-double percentile(QList<double> values, double ratio) {
-    if (values.isEmpty()) {
+double percentileFromPartitioned(std::vector<double> &values,
+                                 int startOffset,
+                                 double ratio,
+                                 int *lowerIndexOut = nullptr) {
+    if (values.empty()) {
+        if (lowerIndexOut) {
+            *lowerIndexOut = 0;
+        }
         return 0.0;
     }
     if (values.size() == 1) {
-        return values.first();
+        if (lowerIndexOut) {
+            *lowerIndexOut = 0;
+        }
+        return values.front();
     }
 
-    std::sort(values.begin(), values.end());
     const double position = clamp(ratio, 0.0, 1.0) * static_cast<double>(values.size() - 1);
     const int lower = static_cast<int>(std::floor(position));
     const int upper = static_cast<int>(std::ceil(position));
-    if (lower == upper) {
-        return values.at(lower);
+    const int safeStart = std::clamp(startOffset, 0, lower);
+
+    std::nth_element(values.begin() + safeStart, values.begin() + lower, values.end());
+    if (lowerIndexOut) {
+        *lowerIndexOut = lower;
     }
+    const double lowerVal = values[static_cast<size_t>(lower)];
+    if (lower == upper) {
+        return lowerVal;
+    }
+    const double upperVal = *std::min_element(values.begin() + lower + 1, values.end());
     const double weight = position - lower;
-    return values.at(lower) * (1.0 - weight) + values.at(upper) * weight;
+    return lowerVal * (1.0 - weight) + upperVal * weight;
 }
 
 QColor interpolateColor(const QColor &from, const QColor &to, double t) {
@@ -177,14 +194,15 @@ QImage TecMapRenderer::render(const TecGridData &dataset, const QSize &size) {
         return image;
     }
 
-    QList<double> tecValues;
-    tecValues.reserve(dataset.samples.size());
+    std::vector<double> tecValues;
+    tecValues.reserve(static_cast<size_t>(dataset.samples.size()));
     for (const TecSample &sample : dataset.samples) {
-        tecValues.append(sample.tec);
+        tecValues.push_back(sample.tec);
     }
 
-    double minTec = percentile(tecValues, 0.02);
-    double maxTec = percentile(tecValues, 0.98);
+    int low02 = 0;
+    double minTec = percentileFromPartitioned(tecValues, 0, 0.02, &low02);
+    double maxTec = percentileFromPartitioned(tecValues, low02, 0.98);
     if (maxTec - minTec < 1e-6) {
         minTec = dataset.minTec;
         maxTec = dataset.maxTec;

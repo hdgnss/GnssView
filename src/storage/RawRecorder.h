@@ -1,9 +1,15 @@
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
+
 #include <QDateTime>
 #include <QFile>
 #include <QObject>
-#include <QTimer>
+#include <QStringList>
 
 #include "src/core/StreamChunker.h"
 #include "src/protocols/GnssTypes.h"
@@ -42,29 +48,54 @@ signals:
     void writeFailed(const QString &message);
 
 private:
+    enum class TaskKind {
+        OpenSession,
+        CloseSession,
+        WriteRaw,
+        WriteChunk,
+        Flush
+    };
+
+    struct WriteTask {
+        TaskKind kind = TaskKind::Flush;
+        quint64 sequence = 0;
+        QString binaryPath;
+        QString logPath;
+        QByteArray rawPayload;
+        QDateTime timestampUtc;
+        DataDirection direction = DataDirection::Rx;
+        StreamChunk chunk;
+        QStringList decodedLines;
+    };
+
     QString sanitizeFilePart(const QString &value) const;
     void closeFiles();
-    void ensureOpen();
-    void scheduleFlush();
-    void writeLogEntry(const QDateTime &timestampUtc,
-                       DataDirection direction,
-                       const QString &format,
-                       const QString &data);
+    quint64 enqueueTask(WriteTask task);
+    void waitForSequence(quint64 sequence);
+    void workerLoop();
+    void reportWriteFailure(const QString &path, const QString &error);
 
     QString m_logRootDirectory;
     QString m_sessionDirectory;
     QString m_fileStem;
-    QFile m_binaryFile;
-    QFile m_logFile;
-    QTimer m_flushTimer;
+    QString m_binaryFilePath;
+    QString m_logFilePath;
     bool m_recordRawEnabled = false;
     bool m_recordDecodeEnabled = false;
-    qint64 m_bytesRecorded = 0;
-    qint64 m_entriesRecorded = 0;
-    qint64 m_pendingBinaryFlushBytes = 0;
-    qint64 m_pendingLogFlushBytes = 0;
+    std::atomic<bool> m_binaryFileOpen{false};
+    std::atomic<qint64> m_bytesRecorded{0};
+    std::atomic<qint64> m_entriesRecorded{0};
     bool m_writeFailureReported = false;
-    void reportWriteFailure(const QString &path, const QString &error);
+
+    std::mutex m_mutex;
+    std::condition_variable m_taskCv;
+    std::condition_variable m_doneCv;
+    std::deque<WriteTask> m_taskQueue;
+    qint64 m_queuedBytes = 0;
+    quint64 m_nextSequence = 0;
+    quint64 m_completedSequence = 0;
+    bool m_stopWorker = false;
+    std::thread m_workerThread;
 };
 
 }  // namespace hdgnss

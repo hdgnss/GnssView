@@ -1,17 +1,16 @@
 #pragma once
 
 #include <QObject>
-#include <QNetworkAccessManager>
 #include <QSet>
 #include <QTimer>
 #include <memory>
-#include <optional>
 
 #include "src/core/AutomationPluginLoader.h"
 #include "src/core/BuiltinProtocolRegistry.h"
 #include "src/core/AppSettings.h"
-#include "src/core/FilePacketizer.h"
+#include "src/core/FileCommandSender.h"
 #include "src/core/ProtocolDispatcher.h"
+#include "src/core/ProtocolInfoStore.h"
 #include "src/core/ProtocolPluginLoader.h"
 #include "src/core/StreamChunker.h"
 #include "src/core/TransportViewModel.h"
@@ -23,9 +22,6 @@
 #include "src/models/SignalModel.h"
 #include "src/protocols/NmeaProtocolPlugin.h"
 #include "src/storage/RawRecorder.h"
-
-class QNetworkReply;
-class QUrl;
 
 namespace hdgnss {
 
@@ -188,20 +184,6 @@ private:
         int lastTxChunkSize = 0;
     };
 
-    struct ProtocolInfoPanelState {
-        ProtocolInfoPanel definition;
-        QHash<QString, QVariant> values;
-    };
-
-    struct FileSendJob {
-        QString filePath;
-        QString decoderName;
-        QString resolvedTarget;
-        QList<QByteArray> packets;
-        int packetIntervalMs = 0;
-        int nextPacketIndex = 0;
-    };
-
     // Qt slot wired to automation plugin's sendRequested() signal via QueuedConnection.
     // Using a real slot (not just Q_INVOKABLE) is required for old-style cross-DSO connect.
     Q_SLOT void onAutomationSendRequested(const QByteArray &bytes, const QString &target);
@@ -223,12 +205,6 @@ private:
     void registerProtocolInfoPanels(const QList<ProtocolInfoPanel> &panels);
     bool sendRawCommand(const QByteArray &bytes, const QString &target);
     IProtocolPlugin *findProtocolPlugin(const QString &protocolName) const;
-    bool sendFileCommand(const QString &filePath, const QString &decoderName, const QString &target, int packetIntervalMs);
-    bool queueFileBytesForSend(const QByteArray &fileBytes, const QString &sourceLabel, const QString &decoderName, const QString &target, int packetIntervalMs);
-    void downloadFileCommand(const QUrl &url, const QString &decoderName, const QString &target, int packetIntervalMs);
-    void handleFileDownloadFinished(QNetworkReply *reply, const QUrl &sourceUrl, const QString &decoderName, const QString &target, int packetIntervalMs);
-    void startNextFileSendJob();
-    void sendNextFilePacket();
     void handleIncomingBytes(const QString &transportName, const QByteArray &bytes, DataDirection direction);
     void applyProtocolMessage(const ProtocolMessage &message);
     void recordDeviationSample(const ProtocolMessage &message);
@@ -237,9 +213,6 @@ private:
     void flushUiRefresh();
     void refreshSatellites();
     QVariantMap streamCountersMap(const QString &transportName, const StreamCounters &counters) const;
-    QVariantMap protocolInfoPanelMap(const ProtocolInfoPanelState &panel) const;
-    QVariantList protocolInfoPanelItems(const ProtocolInfoPanelState &panel) const;
-    QString formatProtocolInfoValue(const ProtocolInfoField &field, const QVariant &value) const;
     QString signalUsageText(const QString &group) const;
     static int deviationSamplePriority(const QString &messageName);
 
@@ -274,11 +247,8 @@ private:
     QHash<QString, StreamCounters> m_streamCounters;
     QList<StreamChunker::BinaryFramer> m_binaryFramers;
     QHash<QString, StreamChunker> m_streamBuffers;
-    QList<ProtocolInfoPanelState> m_protocolInfoPanels;
-    QList<FileSendJob> m_fileSendQueue;
-    std::optional<FileSendJob> m_activeFileSendJob;
-    QNetworkAccessManager m_fileDownloadManager;
-    QTimer m_fileSendTimer;
+    ProtocolInfoStore m_protocolInfoStore;
+    std::unique_ptr<FileCommandSender> m_fileCommandSender;
     QTimer m_uiRefreshTimer;
     QDateTime m_lastDeviationSampleUtcTime;
     int m_lastDeviationSamplePriority = -1;

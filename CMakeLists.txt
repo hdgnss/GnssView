@@ -76,8 +76,10 @@ set(HDGNSS_SOURCES
     src/core/AutomationPluginLoader.cpp
     src/core/BinaryProtocolRouter.cpp
     src/core/BuiltinProtocolRegistry.cpp
+    src/core/FileCommandSender.cpp
     src/core/FilePacketizer.cpp
     src/core/ProtocolDispatcher.cpp
+    src/core/ProtocolInfoStore.cpp
     src/core/ProtocolPluginLoader.cpp
     src/core/StreamChunker.cpp
     src/core/TecPluginLoader.cpp
@@ -119,8 +121,10 @@ set(HDGNSS_HEADERS
     src/core/AppSettings.h
     src/core/BinaryProtocolRouter.h
     src/core/BuiltinProtocolRegistry.h
+    src/core/FileCommandSender.h
     src/core/FilePacketizer.h
     src/core/ProtocolDispatcher.h
+    src/core/ProtocolInfoStore.h
     src/core/ProtocolPluginLoader.h
     src/core/PluginMetadata.h
     src/core/StreamChunker.h
@@ -182,8 +186,10 @@ add_executable(GnssViewRegression
     src/core/AutomationPluginLoader.cpp
     src/core/BinaryProtocolRouter.cpp
     src/core/BuiltinProtocolRegistry.cpp
+    src/core/FileCommandSender.cpp
     src/core/FilePacketizer.cpp
     src/core/ProtocolDispatcher.cpp
+    src/core/ProtocolInfoStore.cpp
     src/core/ProtocolPluginLoader.cpp
     src/core/StreamChunker.cpp
     src/core/TecPluginLoader.cpp
