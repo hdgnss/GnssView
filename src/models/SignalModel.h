@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 
 #include "src/models/SatelliteStore.h"
 #include "src/protocols/GnssTypes.h"
@@ -46,6 +47,8 @@ signals:
 private:
     SatelliteStore *m_store = nullptr;
     SatelliteStore m_ownStore;
+    mutable QHash<QString, QVariantList> m_cachedBandItems;
+    mutable int m_cachedSignalRevision = -1;
 };
 
 }  // namespace hdgnss

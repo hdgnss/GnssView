@@ -31,6 +31,7 @@ public:
     const SatelliteInfo &at(int row) const;
     const QList<SatelliteInfo> &items() const;
     int revision() const;
+    int signalRevision() const;
 
 signals:
     void aboutToInsert(int row);
@@ -38,12 +39,18 @@ signals:
     void aboutToRemove(int row);
     void removed();
     void changed(int row);
+    void signalChanged(int row);
+    void countChanged();
     // Emitted once per setSatellites() call that modified the store.
     void revisionChanged();
+    // Emitted once per setSatellites() call that modified signal-spectrum state
+    // (ignores azimuth/elevation-only changes).
+    void signalRevisionChanged();
 
 private:
     QList<SatelliteInfo> m_items;
     int m_revision = 0;
+    int m_signalRevision = 0;
 };
 
 }  // namespace hdgnss

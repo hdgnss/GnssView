@@ -115,5 +115,36 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    // Burst of complete lines exceeding capacityBytes must not drop head lines before parsing.
+    {
+        StreamChunker smallChunker(128);
+        const QByteArray line = "$GPGGA,123519,3112.4640,N,12135.2000,E,1,08,0.9,10.0,M,0.0,M,,*4F\r\n";
+        QByteArray burst;
+        for (int i = 0; i < 6; ++i) {
+            burst.append(line);
+        }
+        smallChunker.append(burst);
+        const QList<StreamChunk> chunks = smallChunker.takeAvailableChunks();
+        if (chunks.size() != 6 || smallChunker.bufferedBytes() != 0) {
+            std::cerr << "burst-over-capacity: expected 6 complete chunks and 0 buffered bytes, got "
+                      << chunks.size() << " chunks and " << smallChunker.bufferedBytes() << " buffered bytes\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    // Incomplete pending binary frame exceeding capacityBytes must still be capped after takeAvailableChunks().
+    {
+        StreamChunker smallChunker(128);
+        smallChunker.append(QByteArray(300, '\xAA'));
+        const QList<StreamChunk> chunks = smallChunker.takeAvailableChunks({
+            [](const QByteArray &) { return -1; }
+        });
+        if (!chunks.isEmpty() || smallChunker.bufferedBytes() != 128) {
+            std::cerr << "pending-frame-cap: expected 0 chunks and 128 buffered bytes, got "
+                      << chunks.size() << " chunks and " << smallChunker.bufferedBytes() << " buffered bytes\n";
+            return EXIT_FAILURE;
+        }
+    }
+
     return EXIT_SUCCESS;
 }

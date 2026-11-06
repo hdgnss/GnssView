@@ -1277,6 +1277,272 @@ bool expectTecSampleLookupByCanvasPoint() {
                   "TEC sample lookup should return the raw TEC value");
 }
 
+bool expectTcpClientTransportCompactsReadBuffer() {
+    QTcpServer server;
+    if (!expect(server.listen(QHostAddress::LocalHost, 0), "TCP test server should listen on localhost")) {
+        return false;
+    }
+
+    QTcpSocket *serverSocket = nullptr;
+    QObject::connect(&server, &QTcpServer::newConnection, [&server, &serverSocket]() {
+        serverSocket = server.nextPendingConnection();
+    });
+
+    hdgnss::TcpClientTransport transport;
+    QByteArray received;
+    int maxObservedBufferSize = 0;
+    QObject::connect(&transport, &hdgnss::ITransport::dataReceived,
+                     [&received, &transport, &maxObservedBufferSize, &serverSocket](const QByteArray &chunk) {
+                         received.append(chunk);
+                         maxObservedBufferSize = std::max(maxObservedBufferSize, transport.readBufferSize());
+                         if (received.size() < 256 * 1024 && serverSocket && serverSocket->state() == QAbstractSocket::ConnectedState) {
+                             serverSocket->write(QByteArray(8 * 1024, 'X'));
+                             serverSocket->flush();
+                         }
+                     });
+
+    transport.openWithSettings({
+        {QStringLiteral("host"), QStringLiteral("127.0.0.1")},
+        {QStringLiteral("port"), server.serverPort()}
+    });
+    if (!expect(waitUntil([&serverSocket, &transport]() {
+                    return serverSocket != nullptr && transport.isOpen();
+                }, 1000),
+                "TCP client transport should connect to local test server")) {
+        return false;
+    }
+
+    const QByteArray initialBurst(128 * 1024, 'A');
+    serverSocket->write(initialBurst);
+    serverSocket->flush();
+
+    const bool drained = waitUntil([&received, &transport]() {
+        return received.size() >= 256 * 1024 && transport.bufferedBytes() == 0;
+    }, 3000);
+    transport.close();
+
+    return expect(drained, "TCP client transport should drain all streamed bytes")
+        && expect(transport.readBufferSize() == 0,
+                  "TCP client transport should compact its read buffer to zero once drained")
+        && expect(maxObservedBufferSize < 240 * 1024,
+                  "TCP client transport should progressively compact consumed prefix during continuous streaming");
+}
+
+bool expectUnrelatedPluginSettingChangePreservesNmeaAndTecState() {
+    AppSettings settings;
+    AppController controller(&settings);
+
+    const QList<QByteArray> gsv = {
+        withChecksum("GPGGA,123519.00,3112.4640,N,12135.2000,E,1,08,0.9,10.0,M,0.0,M,,"),
+        withChecksum("GPGSV,1,1,02,01,40,083,42,02,17,273,38,1"),
+        withChecksum("GPGSA,A,3,01,,,,,,,,,,,,1.6,0.8,1.4,1")
+    };
+    for (const QByteArray &sentence : gsv) {
+        QMetaObject::invokeMethod(controller.transportViewModel()->tcpTransport(),
+                                  "dataReceived",
+                                  Qt::DirectConnection,
+                                  Q_ARG(QByteArray, sentence));
+    }
+    controller.regressionFlushUiRefresh();
+    if (!expect(controller.satelliteUsage() == QStringLiteral("1 / 2") && controller.satellitesInView() == 2,
+                "initial NMEA GSV+GSA should populate controller satellite state")) {
+        return false;
+    }
+
+    hdgnss::TecGridData dataset;
+    dataset.timestampUtc = QDateTime::fromString(QStringLiteral("2026-04-17T04:45:00Z"), Qt::ISODate);
+    dataset.sourceId = QStringLiteral("test-tec");
+    dataset.sourceName = QStringLiteral("Test TEC");
+    dataset.samples = {{122.5, 31.25, 40.38, 0}};
+    controller.tecMapOverlayModel()->setTestDataset(dataset);
+
+    // Modifying a transport plugin setting must not reset NMEA state or wipe the TEC dataset.
+    settings.setPluginPrivateSettings(QStringLiteral("com.hdgnss.transport.spi"), {});
+    int settingsChangedSignals = 0;
+    QObject::connect(&settings, &AppSettings::pluginSettingsChanged, [&settingsChangedSignals]() {
+        ++settingsChangedSignals;
+    });
+    settings.setPluginSettingValue(QStringLiteral("com.hdgnss.transport.spi"),
+                                   QStringLiteral("clockHz"),
+                                   1000000);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+
+    // Send a subsequent GSV update without resending GSA; PRN 01 must still be marked used in fix
+    // because m_nmea was not reset by the unrelated transport plugin setting change.
+    QMetaObject::invokeMethod(controller.transportViewModel()->tcpTransport(),
+                              "dataReceived",
+                              Qt::DirectConnection,
+                              Q_ARG(QByteArray, withChecksum("GPGSV,1,1,02,01,41,083,43,02,17,273,38,1")));
+    controller.regressionFlushUiRefresh();
+
+    const QPointF clickPoint = projectedCanvasPointForTest(964.0, 488.0, 122.5, 31.25);
+    const QVariantMap tecSample = controller.tecMapOverlayModel()->sampleAtCanvasPoint(clickPoint.x(), clickPoint.y(), 964.0, 488.0);
+
+    return expect(settingsChangedSignals == 1,
+                  "modifying a plugin setting value should emit pluginSettingsChanged once")
+        && expect(controller.satelliteUsage() == QStringLiteral("1 / 2"),
+                  "unrelated plugin setting change must not reset NMEA GSA used-in-fix state")
+        && expect(tecSample.value(QStringLiteral("valid")).toBool(),
+                  "unrelated plugin setting change must not wipe active TEC dataset");
+}
+
+bool expectSkyAndSignalModelPreaggregatedStatsAndSignalFiltering() {
+    auto makeSat = [](const QString &constellation,
+                      const QString &band,
+                      int signalId,
+                      int svid,
+                      int azimuth,
+                      int elevation,
+                      int cn0,
+                      bool used) {
+        SatelliteInfo sat;
+        sat.key = QStringLiteral("%1-%2-%3").arg(constellation).arg(signalId).arg(svid);
+        sat.constellation = constellation;
+        sat.band = band;
+        sat.signalId = signalId;
+        sat.svid = svid;
+        sat.azimuth = azimuth;
+        sat.elevation = elevation;
+        sat.cn0 = cn0;
+        sat.usedInFix = used;
+        return sat;
+    };
+
+    hdgnss::SatelliteStore store;
+    SatelliteModel sky;
+    SignalModel sig;
+    sky.setStore(&store);
+    sig.setStore(&store);
+
+    store.setSatellites({
+        makeSat(QStringLiteral("BEIDOU"), QStringLiteral("L1"), 1, 205, 110, 45, 38, false),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 12, 120, 50, 44, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 3, 130, 55, 41, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L5"), 7, 3, 130, 55, 39, true)
+    });
+
+    const QVariantMap counts = sky.constellationCounts();
+    const QVariantMap bandStats = sky.bandStats();
+    const QVariantMap l1Stats = bandStats.value(QStringLiteral("L1")).toMap();
+    const QVariantMap b1Stats = bandStats.value(QStringLiteral("B1")).toMap();
+    const QVariantMap l5Stats = bandStats.value(QStringLiteral("L5")).toMap();
+
+    if (!expect(counts.value(QStringLiteral("ALL")).toInt() == 4, "ALL count should include all visible signal rows")
+        || !expect(counts.value(QStringLiteral("GPS")).toInt() == 3, "GPS count should match GPS signal rows")
+        || !expect(counts.value(QStringLiteral("BEIDOU")).toInt() == 1, "BEIDOU count should match BEIDOU signal rows")
+        || !expect(l1Stats.value(QStringLiteral("used")).toInt() == 2 && l1Stats.value(QStringLiteral("view")).toInt() == 2,
+                   "L1 band stats should report 2/2 used/view")
+        || !expect(b1Stats.value(QStringLiteral("used")).toInt() == 0 && b1Stats.value(QStringLiteral("view")).toInt() == 1,
+                   "B1 band stats should report 0/1 used/view")
+        || !expect(l5Stats.value(QStringLiteral("used")).toInt() == 1 && l5Stats.value(QStringLiteral("view")).toInt() == 1,
+                   "L5 band stats should report 1/1 used/view")) {
+        return false;
+    }
+
+    // SignalModel::itemsForBand("L1") should be pre-sorted by (constellationSortOrder, label):
+    // GPS G03 -> GPS G12 -> BEIDOU C205.
+    const QVariantList l1Items = sig.itemsForBand(QStringLiteral("L1"));
+    if (!expect(l1Items.size() == 3, "L1 itemsForBand should return 3 items")
+        || !expect(l1Items.at(0).toMap().value(QStringLiteral("label")).toString() == QStringLiteral("G03")
+                   && l1Items.at(1).toMap().value(QStringLiteral("label")).toString() == QStringLiteral("G12")
+                   && l1Items.at(2).toMap().value(QStringLiteral("label")).toString() == QStringLiteral("C205"),
+                   "SignalModel::itemsForBand should return items pre-sorted by constellation and label")) {
+        return false;
+    }
+
+    const int sigRevBeforeAzElUpdate = sig.revision();
+    const int skyRevBeforeAzElUpdate = sky.revision();
+    int sigDataChangedCount = 0;
+    QObject::connect(&sig, &QAbstractItemModel::dataChanged, [&sigDataChangedCount]() {
+        ++sigDataChangedCount;
+    });
+
+    // Update only azimuth/elevation: SkyView revision must advance, SignalModel revision must stay unchanged.
+    store.setSatellites({
+        makeSat(QStringLiteral("BEIDOU"), QStringLiteral("L1"), 1, 205, 115, 46, 38, false),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 12, 125, 52, 44, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 3, 135, 56, 41, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L5"), 7, 3, 135, 56, 39, true)
+    });
+
+    if (!expect(sky.revision() > skyRevBeforeAzElUpdate,
+                "azimuth/elevation update should advance SkyView SatelliteModel revision")
+        || !expect(sig.revision() == sigRevBeforeAzElUpdate && sigDataChangedCount == 0,
+                   "azimuth/elevation-only update must not trigger SignalModel revision or dataChanged")) {
+        return false;
+    }
+
+    // Now update CN0: SignalModel revision and cached itemsForBand must update.
+    store.setSatellites({
+        makeSat(QStringLiteral("BEIDOU"), QStringLiteral("L1"), 1, 205, 115, 46, 47, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 12, 125, 52, 44, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L1"), 1, 3, 135, 56, 41, true),
+        makeSat(QStringLiteral("GPS"), QStringLiteral("L5"), 7, 3, 135, 56, 39, true)
+    });
+
+    const QVariantList updatedL1Items = sig.itemsForBand(QStringLiteral("L1"));
+    return expect(sig.revision() > sigRevBeforeAzElUpdate && sigDataChangedCount == 1,
+                  "CN0/usedInFix update should advance SignalModel revision and emit dataChanged once")
+        && expect(updatedL1Items.at(2).toMap().value(QStringLiteral("strength")).toInt() == 47,
+                  "cached itemsForBand should reflect updated CN0")
+        && expect(sky.bandStats().value(QStringLiteral("B1")).toMap().value(QStringLiteral("used")).toInt() == 1,
+                  "SkyView bandStats should reflect updated B1 used count");
+}
+
+bool expectDeviationMapCanvasPointsDeduplicationAndThrottling() {
+    DeviationMapModel model;
+    model.setFixedCenterEnabled(true);
+    model.setFixedCenter(31.0, 121.0);
+
+    // Add 200 identical points plus 1 distinct latest point.
+    for (int i = 0; i < 200; ++i) {
+        model.addSample(31.00001, 121.00001);
+    }
+    model.addSample(31.00005, 121.00005);
+
+    const QVariantList points = model.canvasPoints(100.0, 100.0, 80.0);
+    if (!expect(model.rowCount() == 201, "DeviationMapModel should retain all 201 raw samples")
+        || !expect(points.size() == 2,
+                   "canvasPoints should deduplicate 200 overlapping historical points into 1 point plus 1 latest point")
+        || !expect(!points.first().toMap().value(QStringLiteral("latest")).toBool()
+                   && points.last().toMap().value(QStringLiteral("latest")).toBool(),
+                   "canvasPoints should mark only the final point as latest")) {
+        return false;
+    }
+
+    // Verify AppController throttles DeviationMapModel signals until flushUiRefresh.
+    NmeaProtocolPlugin plugin;
+    AppSettings settings;
+    AppController controller(&settings);
+    int revSignals = 0;
+    QObject::connect(controller.deviationMapModel(), &DeviationMapModel::revisionChanged, [&revSignals]() {
+        ++revSignals;
+    });
+
+    const QString today = QDateTime::currentDateTimeUtc().toString(QStringLiteral("ddMMyy"));
+    for (int i = 0; i < 5; ++i) {
+        const QByteArray body = QStringLiteral("GPRMC,1235%1.000,A,3112.465%2,N,12135.201%2,E,0.0,0.0,%3,0.0,E")
+                                    .arg(10 + i, 2, 10, QLatin1Char('0'))
+                                    .arg(i)
+                                    .arg(today)
+                                    .toLatin1();
+        if (!applyNmeaSentence(plugin, controller, body)) {
+            return false;
+        }
+    }
+
+    if (!expect(controller.deviationMapModel()->rowCount() == 5,
+                "deviation samples should be recorded immediately in rowCount")
+        || !expect(revSignals == 0,
+                   "DeviationMapModel signals should be deferred until flushUiRefresh")) {
+        return false;
+    }
+
+    controller.regressionFlushUiRefresh();
+    return expect(revSignals == 1,
+                  "flushUiRefresh should emit a single coalesced DeviationMapModel update for the burst");
+}
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -1378,6 +1644,18 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     if (!expectTecSampleLookupByCanvasPoint()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectTcpClientTransportCompactsReadBuffer()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectUnrelatedPluginSettingChangePreservesNmeaAndTecState()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectSkyAndSignalModelPreaggregatedStatsAndSignalFiltering()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectDeviationMapCanvasPointsDeduplicationAndThrottling()) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

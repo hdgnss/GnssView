@@ -43,34 +43,7 @@ GlassPanel {
     }
 
     function groupedBandItems(items) {
-        var sorted = []
-        for (var i = 0; i < items.length; ++i) {
-            var item = items[i]
-            sorted.push(item)
-        }
-        sorted.sort(function(a, b) {
-            var orderDiff = root.constellationOrder(a.constellation || "GNSS") - root.constellationOrder(b.constellation || "GNSS")
-            if (orderDiff !== 0) {
-                return orderDiff
-            }
-            return String(a.label || "").localeCompare(String(b.label || ""))
-        })
-
-        for (var j = 0; j < sorted.length; ++j) {
-            var item = sorted[j]
-            var constellation = item.constellation || "GNSS"
-            sorted[j] = {
-                kind: "satellite",
-                label: item.label,
-                constellation: constellation,
-                bandGroup: item.bandGroup,
-                signalId: item.signalId,
-                svid: item.svid,
-                strength: item.strength,
-                usedInFix: item.usedInFix
-            }
-        }
-        return sorted
+        return items || []
     }
 
     function prnText(modelData) {
@@ -393,10 +366,11 @@ GlassPanel {
                                     spacing: instrumentPanel.slotSpacing
 
                                     Repeater {
-                                        model: instrumentPanel.groupedItems
+                                        model: instrumentPanel.groupedItems.length
 
                                         Item {
-                                            required property var modelData
+                                            required property int index
+                                            readonly property var modelData: instrumentPanel.groupedItems[index] || ({})
                                             readonly property real strength: Number(modelData.strength !== undefined ? modelData.strength : 0)
                                             readonly property real displayStrength: root.clampStrength(strength)
                                             readonly property bool hasSignal: displayStrength > 0
@@ -532,40 +506,26 @@ GlassPanel {
                                                 x: parent.x + parent.width * 0.5 - width * 0.5
                                                 y: parent.y - height - 10
                                             }
-                                        }
-                                    }
-                                }
 
-                                Row {
-                                    x: instrumentPanel.chartHorizontalPadding
-                                    y: parent.height - instrumentPanel.plotBottomPadding
-                                    height: instrumentPanel.plotBottomPadding
-                                    spacing: instrumentPanel.slotSpacing
+                                            Item {
+                                                x: 0
+                                                y: parent.height - instrumentPanel.plotBottomPadding
+                                                width: parent.width
+                                                height: instrumentPanel.plotBottomPadding
 
-                                    Repeater {
-                                        model: instrumentPanel.groupedItems
-
-                                        Item {
-                                            required property var modelData
-                                            readonly property string label: root.prnText(modelData)
-                                            readonly property bool hot: instrumentPanel.hotLabel === label
-                                                && instrumentPanel.hotConstellation === (modelData.constellation || "GNSS")
-
-                                            width: instrumentPanel.barWidth
-                                            height: parent.height
-
-                                            Text {
-                                                visible: hot || instrumentPanel.labelStride === 1 || (index % instrumentPanel.labelStride === 0)
-                                                anchors.centerIn: parent
-                                                text: label
-                                                color: hot ? theme.textPrimary : Qt.lighter(theme.textSecondary, 1.2)
-                                                font.family: theme.monoFont
-                                                font.pixelSize: Math.max(9, theme.labelSize - 2)
-                                                font.bold: true
-                                                opacity: hot ? 1.0 : 0.92
-                                                rotation: -90
-                                                transformOrigin: Item.Center
-                                                elide: Text.ElideNone
+                                                Text {
+                                                    visible: isHot || instrumentPanel.labelStride === 1 || (index % instrumentPanel.labelStride === 0)
+                                                    anchors.centerIn: parent
+                                                    text: label
+                                                    color: isHot ? theme.textPrimary : Qt.lighter(theme.textSecondary, 1.2)
+                                                    font.family: theme.monoFont
+                                                    font.pixelSize: Math.max(9, theme.labelSize - 2)
+                                                    font.bold: true
+                                                    opacity: isHot ? 1.0 : 0.92
+                                                    rotation: -90
+                                                    transformOrigin: Item.Center
+                                                    elide: Text.ElideNone
+                                                }
                                             }
                                         }
                                     }

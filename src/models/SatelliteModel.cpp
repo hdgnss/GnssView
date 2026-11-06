@@ -80,20 +80,23 @@ void SatelliteModel::setStore(SatelliteStore *store) {
     });
     connect(m_store, &SatelliteStore::inserted, this, [this]() {
         endInsertRows();
-        emit countChanged();
     });
     connect(m_store, &SatelliteStore::aboutToRemove, this, [this](int row) {
         beginRemoveRows({}, row, row);
     });
     connect(m_store, &SatelliteStore::removed, this, [this]() {
         endRemoveRows();
-        emit countChanged();
     });
     connect(m_store, &SatelliteStore::changed, this, [this](int row) {
         const QModelIndex idx = index(row);
         emit dataChanged(idx, idx);
     });
-    connect(m_store, &SatelliteStore::revisionChanged, this, &SatelliteModel::revisionChanged);
+    connect(m_store, &SatelliteStore::countChanged, this, &SatelliteModel::countChanged);
+    connect(m_store, &SatelliteStore::revisionChanged, this, [this]() {
+        rebuildSummaryStats();
+        emit revisionChanged();
+    });
+    rebuildSummaryStats();
     endResetModel();
     emit countChanged();
     emit revisionChanged();
@@ -109,6 +112,59 @@ void SatelliteModel::setSatellites(const QList<SatelliteInfo> &satellites) {
 
 int SatelliteModel::revision() const {
     return m_store->revision();
+}
+
+QVariantMap SatelliteModel::constellationCounts() const {
+    return m_constellationCounts;
+}
+
+QVariantMap SatelliteModel::bandStats() const {
+    return m_bandStats;
+}
+
+void SatelliteModel::rebuildSummaryStats() {
+    QHash<QString, int> countsByConstellation;
+    struct PairCount {
+        int used = 0;
+        int view = 0;
+    };
+    QHash<QString, PairCount> countsByBand;
+    PairCount allCount;
+
+    if (m_store) {
+        for (const SatelliteInfo &sat : m_store->items()) {
+            countsByConstellation[sat.constellation] += 1;
+            const QString group = satelliteSignalGroup(sat);
+            PairCount &bandEntry = countsByBand[group];
+            bandEntry.view += 1;
+            allCount.view += 1;
+            if (sat.usedInFix) {
+                bandEntry.used += 1;
+                allCount.used += 1;
+            }
+        }
+    }
+
+    QVariantMap nextConstellations;
+    nextConstellations.insert(QStringLiteral("ALL"), allCount.view);
+    for (auto it = countsByConstellation.cbegin(); it != countsByConstellation.cend(); ++it) {
+        nextConstellations.insert(it.key(), it.value());
+    }
+
+    QVariantMap nextBands;
+    nextBands.insert(QStringLiteral("ALL"), QVariantMap{
+        {QStringLiteral("used"), allCount.used},
+        {QStringLiteral("view"), allCount.view}
+    });
+    for (auto it = countsByBand.cbegin(); it != countsByBand.cend(); ++it) {
+        nextBands.insert(it.key(), QVariantMap{
+            {QStringLiteral("used"), it.value().used},
+            {QStringLiteral("view"), it.value().view}
+        });
+    }
+
+    m_constellationCounts = std::move(nextConstellations);
+    m_bandStats = std::move(nextBands);
 }
 
 }  // namespace hdgnss

@@ -1,5 +1,8 @@
 #include "StreamChunker.h"
 
+#include <QByteArrayView>
+#include <algorithm>
+
 #include "src/protocols/NmeaProtocolPlugin.h"
 
 namespace hdgnss {
@@ -23,7 +26,7 @@ bool isAsciiDigit(char ch) {
     return value >= '0' && value <= '9';
 }
 
-bool looksLikeDigitTaggedTextRun(const QByteArray &buffer, int start) {
+bool looksLikeDigitTaggedTextRun(QByteArrayView buffer, int start) {
     if (start < 0 || start >= buffer.size() || !isAsciiDigit(buffer.at(start))) {
         return false;
     }
@@ -57,7 +60,7 @@ bool looksLikeDigitTaggedTextRun(const QByteArray &buffer, int start) {
     return false;
 }
 
-bool isTextLike(const QByteArray &payload) {
+bool isTextLike(QByteArrayView payload) {
     if (payload.isEmpty()) {
         return false;
     }
@@ -69,7 +72,17 @@ bool isTextLike(const QByteArray &payload) {
     return true;
 }
 
-bool looksLikeTextRun(const QByteArray &buffer, int start, bool allowShortPlainText) {
+// When returning false because a non-printable byte was encountered at `end` or
+// because `buffer` ended without any '\r'/'\n', `*skipToOut` is set to that
+// index so callers scanning for the next text boundary can skip all intermediate
+// start positions in O(1) instead of re-scanning the same range in O(N^2).
+bool looksLikeTextRun(QByteArrayView buffer,
+                      int start,
+                      bool allowShortPlainText,
+                      int *skipToOut = nullptr) {
+    if (skipToOut) {
+        *skipToOut = start;
+    }
     if (start < 0 || start >= buffer.size() || !isPrintableAscii(buffer.at(start))) {
         return false;
     }
@@ -90,15 +103,16 @@ bool looksLikeTextRun(const QByteArray &buffer, int start, bool allowShortPlainT
         const char current = buffer.at(end);
         if (current == '\r' || current == '\n') {
             const int textLength = end - start;
+            const QByteArrayView lineSlice = buffer.first(end + 1);
             if (dollarPrefixed) {
                 return textLength >= 4 && letterCount >= 2;
             }
             if (digitPrefixed) {
-                return looksLikeDigitTaggedTextRun(buffer.left(end + 1), start);
+                return looksLikeDigitTaggedTextRun(lineSlice, start);
             }
             if (start + 1 < buffer.size()
                 && isAsciiDigit(buffer.at(start + 1))
-                && looksLikeDigitTaggedTextRun(buffer.left(end + 1), start + 1)) {
+                && looksLikeDigitTaggedTextRun(lineSlice, start + 1)) {
                 return false;
             }
             if (letterCount < 2) {
@@ -110,6 +124,9 @@ bool looksLikeTextRun(const QByteArray &buffer, int start, bool allowShortPlainT
             return textLength >= 8 || sawWhitespace;
         }
         if (!isPrintableAscii(current)) {
+            if (skipToOut) {
+                *skipToOut = end;
+            }
             return false;
         }
         if (current == ' ' || current == '\t') {
@@ -121,10 +138,13 @@ bool looksLikeTextRun(const QByteArray &buffer, int start, bool allowShortPlainT
             shortRunIsAlphabetic = false;
         }
     }
+    if (skipToOut) {
+        *skipToOut = static_cast<int>(buffer.size());
+    }
     return false;
 }
 
-int findLineEnd(const QByteArray &buffer) {
+int findLineEnd(QByteArrayView buffer) {
     for (int i = 0; i < buffer.size(); ++i) {
         const char ch = buffer.at(i);
         if (ch == '\r' || ch == '\n') {
@@ -134,7 +154,7 @@ int findLineEnd(const QByteArray &buffer) {
     return -1;
 }
 
-int consumeLineEnding(const QByteArray &buffer, int index) {
+int consumeLineEnding(QByteArrayView buffer, int index) {
     int end = index;
     while (end < buffer.size() && (buffer.at(end) == '\r' || buffer.at(end) == '\n')) {
         ++end;
@@ -143,11 +163,11 @@ int consumeLineEnding(const QByteArray &buffer, int index) {
 }
 
 StreamChunkKind classifyChunk(const QByteArray &payload) {
-    QByteArray trimmed = payload;
+    QByteArrayView trimmed(payload);
     while (!trimmed.isEmpty() && (trimmed.endsWith('\r') || trimmed.endsWith('\n'))) {
         trimmed.chop(1);
     }
-    if (trimmed.startsWith('$') && NmeaProtocolPlugin::validateChecksum(trimmed)) {
+    if (trimmed.startsWith('$') && NmeaProtocolPlugin::validateChecksum(trimmed.toByteArray())) {
         return StreamChunkKind::Nmea;
     }
     return isTextLike(payload) ? StreamChunkKind::Text : StreamChunkKind::Binary;
@@ -192,8 +212,14 @@ void StreamChunker::append(const QByteArray &bytes) {
         return;
     }
     m_buffer.append(bytes);
-    if (m_capacityBytes > 0 && m_buffer.size() > m_capacityBytes) {
-        m_buffer.remove(0, m_buffer.size() - m_capacityBytes);
+    // Do not drop unparsed head bytes under normal bursts before
+    // takeAvailableChunks() can extract complete frames; enforce a 4x safety
+    // ceiling only if append() is called repeatedly without draining.
+    const int safetyCapBytes = m_capacityBytes > 0
+        ? std::max(m_capacityBytes * 4, 1024 * 1024)
+        : 0;
+    if (safetyCapBytes > 0 && m_buffer.size() > safetyCapBytes) {
+        m_buffer.remove(0, m_buffer.size() - safetyCapBytes);
     }
 }
 
@@ -204,17 +230,25 @@ QList<StreamChunk> StreamChunker::takeAvailableChunks(const QList<BinaryFramer> 
     // consumed prefix once at the end avoids O(n^2) memmoves per call.
     int offset = 0;
     QByteArray view;
+    QByteArrayView sliceView;
     auto refreshView = [&]() {
-        view = QByteArray::fromRawData(m_buffer.constData() + offset, m_buffer.size() - offset);
+        const char *ptr = m_buffer.constData() + offset;
+        const int remaining = m_buffer.size() - offset;
+        view = QByteArray::fromRawData(ptr, remaining);
+        sliceView = QByteArrayView(ptr, remaining);
     };
     // fromRawData views must never escape; always deep-copy emitted payloads.
     auto owned = [&](int length) {
-        return QByteArray(view.constData(), length);
+        return QByteArray(sliceView.constData(), length);
     };
     auto finish = [&]() {
         view = QByteArray();
+        sliceView = QByteArrayView();
         if (offset > 0) {
             m_buffer.remove(0, offset);
+        }
+        if (m_capacityBytes > 0 && m_buffer.size() > m_capacityBytes) {
+            m_buffer.remove(0, m_buffer.size() - m_capacityBytes);
         }
     };
 
@@ -241,17 +275,19 @@ QList<StreamChunk> StreamChunker::takeAvailableChunks(const QList<BinaryFramer> 
             break;
         }
 
-        if (looksLikeTextRun(view, 0, true)) {
-            const int lineEnd = findLineEnd(view);
+        int initialSkipTo = 0;
+        if (looksLikeTextRun(sliceView, 0, true, &initialSkipTo)) {
+            const int lineEnd = findLineEnd(sliceView);
             if (lineEnd < 0) {
-                if (view.size() > kMaxBufferedTextBytes) {
-                    chunks.append({classifyChunk(owned(view.size())), owned(view.size())});
+                if (sliceView.size() > kMaxBufferedTextBytes) {
+                    const QByteArray payload = owned(sliceView.size());
+                    chunks.append({classifyChunk(payload), payload});
                     offset = m_buffer.size();
                 }
                 break;
             }
 
-            const int consumeEnd = consumeLineEnding(view, lineEnd);
+            const int consumeEnd = consumeLineEnding(sliceView, lineEnd);
             const QByteArray line = owned(consumeEnd);
             chunks.append({classifyChunk(line), line});
             offset += consumeEnd;
@@ -259,10 +295,14 @@ QList<StreamChunk> StreamChunker::takeAvailableChunks(const QList<BinaryFramer> 
         }
 
         int nextBoundary = -1;
-        for (int i = 1; i < view.size(); ++i) {
-            if (looksLikeTextRun(view, i, false)) {
+        for (int i = std::max(1, initialSkipTo + 1); i < sliceView.size(); ++i) {
+            int skipTo = i;
+            if (looksLikeTextRun(sliceView, i, false, &skipTo)) {
                 nextBoundary = i;
                 break;
+            }
+            if (skipTo > i) {
+                i = skipTo;
             }
         }
 
@@ -272,15 +312,15 @@ QList<StreamChunk> StreamChunker::takeAvailableChunks(const QList<BinaryFramer> 
             continue;
         }
 
-        if (isTextLike(view)) {
-            if (view.size() > kMaxBufferedTextBytes) {
-                chunks.append({StreamChunkKind::Text, owned(view.size())});
+        if (initialSkipTo == sliceView.size() || isTextLike(sliceView)) {
+            if (sliceView.size() > kMaxBufferedTextBytes) {
+                chunks.append({StreamChunkKind::Text, owned(sliceView.size())});
                 offset = m_buffer.size();
             }
             break;
         }
 
-        chunks.append({StreamChunkKind::Binary, owned(view.size())});
+        chunks.append({StreamChunkKind::Binary, owned(sliceView.size())});
         offset = m_buffer.size();
     }
 

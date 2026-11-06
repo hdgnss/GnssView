@@ -82,8 +82,8 @@ signals:
     void useFixedDeviationCenterChanged();
     void fixedDeviationLatitudeChanged();
     void fixedDeviationLongitudeChanged();
-    void pluginSettingsChanged();
-    void pluginAvailabilityChanged();
+    void pluginSettingsChanged(const QString &pluginId = QString());
+    void pluginAvailabilityChanged(const QString &pluginId = QString());
 
 private:
     void load();

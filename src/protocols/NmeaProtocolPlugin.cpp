@@ -207,43 +207,42 @@ int NmeaProtocolPlugin::probe(const QByteArray &sample) const {
 QList<ProtocolMessage> NmeaProtocolPlugin::feed(const QByteArray &bytes) {
     m_buffer.append(bytes);
     QList<ProtocolMessage> messages;
+    int offset = 0;
 
-    while (true) {
-        int start = m_buffer.indexOf('$');
+    while (offset < m_buffer.size()) {
+        const int start = m_buffer.indexOf('$', offset);
         if (start < 0) {
-            m_buffer.clear();
+            offset = m_buffer.size();
             break;
         }
-        if (start > 0) {
-            m_buffer.remove(0, start);
-        }
+        offset = start;
 
-        if (m_buffer.size() < 7) {
+        if (m_buffer.size() - offset < 7) {
             break;
         }
 
-        const int star = m_buffer.indexOf('*', 1);
+        const int star = m_buffer.indexOf('*', offset + 1);
         if (star < 0) {
-            const int nextStart = m_buffer.indexOf('$', 1);
-            if (nextStart > 0) {
-                m_buffer.remove(0, nextStart);
+            const int nextStart = m_buffer.indexOf('$', offset + 1);
+            if (nextStart > offset) {
+                offset = nextStart;
                 continue;
             }
-            if (m_buffer.size() > kMaxBufferedNmeaBytes) {
-                m_buffer.clear();
+            if (m_buffer.size() - offset > kMaxBufferedNmeaBytes) {
+                offset = m_buffer.size();
             }
             break;
         }
 
         if (star + 2 >= m_buffer.size()) {
-            if (m_buffer.size() > kMaxBufferedNmeaBytes) {
-                m_buffer.clear();
+            if (m_buffer.size() - offset > kMaxBufferedNmeaBytes) {
+                offset = m_buffer.size();
             }
             break;
         }
 
         if (!isHexByte(m_buffer.at(star + 1), m_buffer.at(star + 2))) {
-            m_buffer.remove(0, 1);
+            ++offset;
             continue;
         }
 
@@ -253,12 +252,18 @@ QList<ProtocolMessage> NmeaProtocolPlugin::feed(const QByteArray &bytes) {
             ++sentenceEnd;
         }
 
-        const QByteArray sentence = m_buffer.left(star + 3);
-        m_buffer.remove(0, sentenceEnd);
+        const QByteArray sentence = m_buffer.mid(offset, star + 3 - offset);
+        offset = sentenceEnd;
         if (!sentence.isEmpty()) {
             const QList<ProtocolMessage> decoded = parseSentence(sentence);
             messages.append(decoded);
         }
+    }
+
+    if (offset >= m_buffer.size()) {
+        m_buffer.clear();
+    } else if (offset > 0) {
+        m_buffer.remove(0, offset);
     }
 
     return messages;
@@ -293,12 +298,23 @@ bool NmeaProtocolPlugin::validateChecksum(const QByteArray &sentence) {
     if (star < 0 || star + 2 >= sentence.size()) {
         return false;
     }
-    bool ok = false;
-    const quint8 expected = sentence.mid(star + 1, 2).toUInt(&ok, 16);
-    if (!ok) {
+    auto hexNibble = [](char ch) -> int {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+        if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+        return -1;
+    };
+    const int high = hexNibble(sentence.at(star + 1));
+    const int low = hexNibble(sentence.at(star + 2));
+    if (high < 0 || low < 0) {
         return false;
     }
-    return checksumForBody(sentence.mid(1, star - 1)) == expected;
+    const quint8 expected = static_cast<quint8>((high << 4) | low);
+    quint8 actual = 0;
+    for (int i = 1; i < star; ++i) {
+        actual ^= static_cast<quint8>(sentence.at(i));
+    }
+    return actual == expected;
 }
 
 void NmeaProtocolPlugin::resetState() {
@@ -484,7 +500,8 @@ QList<ProtocolMessage> NmeaProtocolPlugin::parseSentence(const QByteArray &sente
             {QStringLiteral("pdop"), parseOptionalDouble(rawFields.value(pdopIndex))},
             {QStringLiteral("hdop"), parseOptionalDouble(rawFields.value(hdopIndex))},
             {QStringLiteral("vdop"), parseOptionalDouble(rawFields.value(vdopIndex))},
-            {QStringLiteral("satellites"), satelliteVariantList()}
+            {QStringLiteral("satellites"), satelliteVariantList()},
+            {QStringLiteral("satellitesSnapshot"), true}
         };
         out.append(message);
     } else if (type == QStringLiteral("GSV")) {

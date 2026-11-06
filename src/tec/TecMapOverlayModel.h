@@ -70,6 +70,8 @@ signals:
 
 private slots:
     void handlePluginsEnabledChanged();
+    void handlePluginSettingsChanged(const QString &pluginId);
+    void handlePluginAvailabilityChanged(const QString &pluginId);
     void handlePluginLoadingChanged(bool loadingValue);
     void handlePluginDataReady(const hdgnss::TecGridData &dataset);
     void handlePluginErrorOccurred(const QString &message);

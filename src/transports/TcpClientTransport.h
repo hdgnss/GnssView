@@ -19,12 +19,16 @@ public:
     bool sendData(const QByteArray &payload) override;
     QStringList capabilities() const override;
     QString sessionQualifier() const override;
+    int bufferedBytes() const;
+    int readBufferSize() const;
 
 private:
     void scheduleBufferedDispatch();
     void dispatchBufferedReads();
 
     static constexpr int kDispatchChunkBytes = 16 * 1024;
+    static constexpr int kCompactThresholdBytes = 64 * 1024;
+    static constexpr int kMaxDeadPrefixBytes = 256 * 1024;
 
     QTcpSocket m_socket;
     QByteArray m_readBuffer;

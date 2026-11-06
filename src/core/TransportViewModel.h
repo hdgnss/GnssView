@@ -111,6 +111,9 @@ private:
     ITransport *findTransport(const QString &transportName) const;
     void hookTransport(ITransport *transport);
     void handleTransportOpenChanged();
+    void applyPluginSettings(const QString &pluginId);
+    void handlePluginAvailabilityChanged(const QString &pluginId);
+    bool ownsPluginSettingsId(const QString &pluginId) const;
     QString currentOpenTransportName() const;
     void setLockedTransport(const QString &transportName);
 

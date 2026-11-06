@@ -177,9 +177,10 @@ TecMapOverlayModel::TecMapOverlayModel(AppSettings *settings, QObject *parent)
         connect(m_settings, &AppSettings::pluginDirectoryChanged, this, [this]() {
             QMetaObject::invokeMethod(this, &TecMapOverlayModel::reloadPlugin, Qt::QueuedConnection);
         });
-        connect(m_settings, &AppSettings::pluginSettingsChanged, this, [this]() {
-            QMetaObject::invokeMethod(this, &TecMapOverlayModel::reloadPlugin, Qt::QueuedConnection);
-        });
+        connect(m_settings, &AppSettings::pluginSettingsChanged,
+                this, &TecMapOverlayModel::handlePluginSettingsChanged, Qt::QueuedConnection);
+        connect(m_settings, &AppSettings::pluginAvailabilityChanged,
+                this, &TecMapOverlayModel::handlePluginAvailabilityChanged, Qt::QueuedConnection);
     }
 
     reloadPlugin();
@@ -449,6 +450,62 @@ void TecMapOverlayModel::setObservationTime(const QDateTime &observationTimeUtc)
 void TecMapOverlayModel::handlePluginsEnabledChanged() {
     m_pluginsEnabled = m_settings && m_settings->pluginsEnabled();
     reloadPlugin();
+}
+
+void TecMapOverlayModel::handlePluginSettingsChanged(const QString &pluginId) {
+    const QString cleanedId = pluginId.trimmed();
+    bool matched = false;
+    bool shouldRefresh = false;
+    for (int index = 0; index < m_sources.size(); ++index) {
+        SourceState &source = m_sources[index];
+        if (!cleanedId.isEmpty() && source.pluginId.compare(cleanedId, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        matched = true;
+        if (IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(source.pluginObject)) {
+            configurable->applySettings(m_settings ? m_settings->pluginPrivateSettings(source.pluginId) : QVariantMap{});
+        }
+        updateDatasetLabel(index);
+        if (m_pendingObservationTimeUtc.isValid()
+            && m_pluginsEnabled
+            && source.plugin
+            && (!m_settings || m_settings->pluginEnabled(source.pluginId))
+            && shouldRequestRefresh(source.lastRequestObservationTimeUtc,
+                                    m_pendingObservationTimeUtc,
+                                    source.plugin->downloadIntervalSeconds())) {
+            shouldRefresh = true;
+        }
+    }
+    if (!matched && !cleanedId.isEmpty()) {
+        return;
+    }
+    rebuildDescriptors();
+    applyActiveSourceState();
+    if (shouldRefresh) {
+        m_requestDebounceTimer.start();
+    }
+}
+
+void TecMapOverlayModel::handlePluginAvailabilityChanged(const QString &pluginId) {
+    const QString cleanedId = pluginId.trimmed();
+    bool matched = cleanedId.isEmpty();
+    if (!matched) {
+        for (const SourceState &source : std::as_const(m_sources)) {
+            if (source.pluginId.compare(cleanedId, Qt::CaseInsensitive) == 0) {
+                matched = true;
+                break;
+            }
+        }
+    }
+    if (!matched) {
+        return;
+    }
+    ensureActiveSourceSelection(m_activeSourceId);
+    rebuildDescriptors();
+    applyActiveSourceState();
+    if (m_pendingObservationTimeUtc.isValid() && m_pluginsEnabled && firstEnabledSourceIndex() >= 0) {
+        m_requestDebounceTimer.start();
+    }
 }
 
 void TecMapOverlayModel::handlePluginLoadingChanged(bool loadingValue) {

@@ -1,6 +1,10 @@
 #pragma once
 
+#include <deque>
+#include <vector>
+
 #include <QAbstractListModel>
+#include <QVariantList>
 #include <QVariantMap>
 
 namespace hdgnss {
@@ -29,10 +33,12 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE QVariantMap get(int row) const;
+    Q_INVOKABLE QVariantList canvasPoints(double centerX, double centerY, double maxRadius) const;
     Q_INVOKABLE void clear();
 
-    void addSample(double latitude, double longitude);
-    bool updateLastSample(double latitude, double longitude);
+    void addSample(double latitude, double longitude, bool deferNotify = false);
+    bool updateLastSample(double latitude, double longitude, bool deferNotify = false);
+    void flushDeferredNotifications();
     void setFixedCenterEnabled(bool enabled);
     void setFixedCenter(double latitude, double longitude);
     int revision() const;
@@ -61,15 +67,20 @@ private:
         double distanceMeters = 0.0;
     };
 
-    void recalculate();
+    void ensureCalculated() const;
+    void markDirty(bool deferNotify);
     void trimRawSamples();
-    static QVariantMap buildAxisStats(const QList<double> &values);
-    static QVariantMap buildDistanceStats(const QList<double> &values);
-    static double percentile(const QList<double> &sortedValues, double ratio);
+    static double percentileFromPartitioned(std::vector<double> &values,
+                                            int startOffset,
+                                            double ratio,
+                                            int *lowerIndexOut = nullptr);
 
-    QList<RawSample> m_rawSamples;
-    QList<DeviationSample> m_samples;
-    QVariantMap m_stats;
+    std::deque<RawSample> m_rawSamples;
+    mutable QList<DeviationSample> m_samples;
+    mutable std::vector<double> m_distanceScratch;
+    mutable QVariantMap m_stats;
+    mutable bool m_calculationDirty = false;
+    bool m_notificationsDeferred = false;
     bool m_fixedCenterEnabled = false;
     double m_fixedLatitude = 0.0;
     double m_fixedLongitude = 0.0;

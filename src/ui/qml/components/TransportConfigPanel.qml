@@ -58,16 +58,17 @@ GlassPanel {
     }
 
     component DenseTextField: TextField {
+        id: denseControl
         implicitHeight: theme.controlHeight
         font.family: theme.bodyFont
         font.pixelSize: theme.bodySize
-        color: theme.textPrimary
+        color: (!enabled || readOnly) ? theme.textSecondary : theme.textPrimary
         selectByMouse: true
         background: Rectangle {
             radius: theme.controlRadius
-            color: theme.inputBg
+            color: (!denseControl.enabled || denseControl.readOnly) ? Qt.rgba(theme.inputBg.r, theme.inputBg.g, theme.inputBg.b, 0.45) : theme.inputBg
             border.width: 1
-            border.color: parent.activeFocus ? theme.inputBorderFocus : theme.inputBorder
+            border.color: (!denseControl.enabled || denseControl.readOnly) ? theme.panelBorder : (denseControl.activeFocus ? theme.inputBorderFocus : theme.inputBorder)
         }
     }
 
@@ -944,6 +945,7 @@ GlassPanel {
                                     Loader {
                                         Layout.fillWidth: true
                                         property var fieldData: parent.modelData
+                                        property string pluginId: descriptorData ? (descriptorData.pluginId || "") : ""
                                         sourceComponent: {
                                             var fieldType = String(fieldData.type || "text").toLowerCase()
                                             if (fieldType === "select" || fieldType === "enum" || fieldType === "combo") {
@@ -1145,6 +1147,9 @@ GlassPanel {
 
         Item {
             property var fieldData: parent && parent.fieldData !== undefined ? parent.fieldData : null
+            property string pluginId: parent && parent.pluginId !== undefined
+                ? parent.pluginId
+                : (currentTransportDescriptor() ? (currentTransportDescriptor().pluginId || "") : "")
             implicitWidth: fieldEditor.implicitWidth
             implicitHeight: fieldEditor.implicitHeight
 
@@ -1154,6 +1159,7 @@ GlassPanel {
                 anchors.right: parent.right
                 text: root.pluginFieldValue(parent.fieldData)
                 placeholderText: parent.fieldData ? (parent.fieldData.placeholder || "") : ""
+                readOnly: Boolean(parent.fieldData && (parent.fieldData.readOnly || parent.fieldData.readonly))
                 echoMode: String(parent.fieldData ? (parent.fieldData.type || "") : "").toLowerCase() === "password"
                     ? TextInput.Password
                     : TextInput.Normal
@@ -1165,8 +1171,11 @@ GlassPanel {
                     return null
                 }
                 onEditingFinished: {
-                    if (appSettings && parent.fieldData) {
-                        appSettings.setPluginSettingValue(currentTransportDescriptor().pluginId, parent.fieldData.key, text)
+                    if (readOnly) {
+                        return
+                    }
+                    if (appSettings && parent.fieldData && parent.pluginId.length > 0) {
+                        appSettings.setPluginSettingValue(parent.pluginId, parent.fieldData.key, text)
                     }
                 }
             }
@@ -1178,6 +1187,9 @@ GlassPanel {
 
         Item {
             property var fieldData: parent && parent.fieldData !== undefined ? parent.fieldData : null
+            property string pluginId: parent && parent.pluginId !== undefined
+                ? parent.pluginId
+                : (currentTransportDescriptor() ? (currentTransportDescriptor().pluginId || "") : "")
             implicitWidth: fieldEditor.implicitWidth
             implicitHeight: fieldEditor.implicitHeight
 
@@ -1185,6 +1197,7 @@ GlassPanel {
                 id: fieldEditor
                 anchors.left: parent.left
                 anchors.right: parent.right
+                enabled: !parent.fieldData || (!parent.fieldData.readOnly && !parent.fieldData.readonly)
                 model: root.pluginOptionModel(parent.fieldData)
                 Component.onCompleted: {
                     var value = root.pluginFieldValue(parent.fieldData)
@@ -1199,8 +1212,11 @@ GlassPanel {
                     }
                 }
                 onActivated: {
-                    if (appSettings && parent.fieldData && currentIndex >= 0 && currentIndex < model.length) {
-                        appSettings.setPluginSettingValue(currentTransportDescriptor().pluginId, parent.fieldData.key, model[currentIndex].value)
+                    if (parent.fieldData && (parent.fieldData.readOnly || parent.fieldData.readonly)) {
+                        return
+                    }
+                    if (appSettings && parent.fieldData && parent.pluginId.length > 0 && currentIndex >= 0 && currentIndex < model.length) {
+                        appSettings.setPluginSettingValue(parent.pluginId, parent.fieldData.key, model[currentIndex].value)
                     }
                 }
             }
@@ -1212,6 +1228,9 @@ GlassPanel {
 
         Item {
             property var fieldData: parent && parent.fieldData !== undefined ? parent.fieldData : null
+            property string pluginId: parent && parent.pluginId !== undefined
+                ? parent.pluginId
+                : (currentTransportDescriptor() ? (currentTransportDescriptor().pluginId || "") : "")
             implicitWidth: fieldEditor.implicitWidth
             implicitHeight: fieldEditor.implicitHeight
 
@@ -1219,14 +1238,18 @@ GlassPanel {
                 id: fieldEditor
                 anchors.left: parent.left
                 anchors.right: parent.right
+                enabled: !parent.fieldData || (!parent.fieldData.readOnly && !parent.fieldData.readonly)
                 text: parent.fieldData ? (parent.fieldData.checkboxLabel || "Enabled") : "Enabled"
                 checked: {
                     var value = root.pluginFieldValue(parent.fieldData)
                     return value === true || String(value).toLowerCase() === "true" || String(value) === "1"
                 }
                 onToggled: {
-                    if (appSettings && parent.fieldData) {
-                        appSettings.setPluginSettingValue(currentTransportDescriptor().pluginId, parent.fieldData.key, checked)
+                    if (parent.fieldData && (parent.fieldData.readOnly || parent.fieldData.readonly)) {
+                        return
+                    }
+                    if (appSettings && parent.fieldData && parent.pluginId.length > 0) {
+                        appSettings.setPluginSettingValue(parent.pluginId, parent.fieldData.key, checked)
                     }
                 }
             }

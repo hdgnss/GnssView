@@ -76,6 +76,14 @@ QString TcpClientTransport::sessionQualifier() const {
     return QStringLiteral("%1_%2").arg(m_host).arg(m_port);
 }
 
+int TcpClientTransport::bufferedBytes() const {
+    return std::max(0, static_cast<int>(m_readBuffer.size()) - m_readOffset);
+}
+
+int TcpClientTransport::readBufferSize() const {
+    return m_readBuffer.size();
+}
+
 void TcpClientTransport::scheduleBufferedDispatch() {
     if (m_dispatchScheduled) {
         return;
@@ -93,11 +101,17 @@ void TcpClientTransport::dispatchBufferedReads() {
     }
 
     // Advance a read offset instead of erasing the front on every dispatch
-    // (O(n) memmove each time); compact once the buffer is fully drained.
+    // (O(n) memmove each time); compact once drained or when the consumed
+    // prefix crosses the compaction threshold so continuous streams cannot
+    // grow m_readBuffer without bound.
     const QByteArray chunk = m_readBuffer.mid(m_readOffset, kDispatchChunkBytes);
     m_readOffset += chunk.size();
     if (m_readOffset >= m_readBuffer.size()) {
         m_readBuffer.clear();
+        m_readOffset = 0;
+    } else if ((m_readOffset >= kCompactThresholdBytes && m_readOffset * 2 >= m_readBuffer.size())
+               || m_readOffset >= kMaxDeadPrefixBytes) {
+        m_readBuffer.remove(0, m_readOffset);
         m_readOffset = 0;
     }
     emit dataReceived(chunk);

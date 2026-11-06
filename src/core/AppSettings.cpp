@@ -262,8 +262,7 @@ void AppSettings::setPluginEnabled(const QString &pluginId, bool enabled) {
     }
     m_pluginEnabled.insert(cleaned, enabled);
     storePluginConfiguration(cleaned);
-    emit pluginSettingsChanged();
-    emit pluginAvailabilityChanged();
+    emit pluginAvailabilityChanged(cleaned);
 }
 
 void AppSettings::setExclusivePluginEnabled(const QVariantList &pluginIds,
@@ -300,8 +299,7 @@ void AppSettings::setExclusivePluginEnabled(const QVariantList &pluginIds,
     if (!changed) {
         return;
     }
-    emit pluginSettingsChanged();
-    emit pluginAvailabilityChanged();
+    emit pluginAvailabilityChanged(cleanedTarget);
 }
 
 void AppSettings::setPluginPrivateSettings(const QString &pluginId, const QVariantMap &settings) {
@@ -315,7 +313,7 @@ void AppSettings::setPluginPrivateSettings(const QString &pluginId, const QVaria
         m_pluginPrivateSettings.insert(cleaned, settings);
     }
     storePluginConfiguration(cleaned);
-    emit pluginSettingsChanged();
+    emit pluginSettingsChanged(cleaned);
 }
 
 void AppSettings::setPluginSettingValue(const QString &pluginId, const QString &key, const QVariant &value) {

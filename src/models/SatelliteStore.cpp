@@ -4,15 +4,19 @@ namespace hdgnss {
 
 namespace {
 
-bool sameSatellite(const SatelliteInfo &a, const SatelliteInfo &b) {
+bool sameSignalState(const SatelliteInfo &a, const SatelliteInfo &b) {
     return a.constellation == b.constellation
         && a.band == b.band
         && a.signalId == b.signalId
         && a.svid == b.svid
-        && a.azimuth == b.azimuth
-        && a.elevation == b.elevation
         && a.cn0 == b.cn0
         && a.usedInFix == b.usedInFix;
+}
+
+bool sameSatellite(const SatelliteInfo &a, const SatelliteInfo &b) {
+    return sameSignalState(a, b)
+        && a.azimuth == b.azimuth
+        && a.elevation == b.elevation;
 }
 
 }  // namespace
@@ -32,12 +36,16 @@ const QList<SatelliteInfo> &SatelliteStore::items() const {
     return m_items;
 }
 
-
 int SatelliteStore::revision() const {
     return m_revision;
 }
 
+int SatelliteStore::signalRevision() const {
+    return m_signalRevision;
+}
+
 void SatelliteStore::setSatellites(const QList<SatelliteInfo> &satellites) {
+    const int oldSize = m_items.size();
     QHash<QString, const SatelliteInfo *> incoming;
     incoming.reserve(satellites.size());
     for (const SatelliteInfo &sat : satellites) {
@@ -47,6 +55,7 @@ void SatelliteStore::setSatellites(const QList<SatelliteInfo> &satellites) {
     }
 
     bool modified = false;
+    bool signalModified = false;
 
     // 1. Drop rows whose key disappeared (back to front keeps indices valid).
     for (int row = m_items.size() - 1; row >= 0; --row) {
@@ -57,6 +66,7 @@ void SatelliteStore::setSatellites(const QList<SatelliteInfo> &satellites) {
         m_items.removeAt(row);
         emit removed();
         modified = true;
+        signalModified = true;
     }
 
     // 2. Update surviving rows in place.
@@ -66,9 +76,14 @@ void SatelliteStore::setSatellites(const QList<SatelliteInfo> &satellites) {
         const SatelliteInfo &next = *incoming.value(m_items.at(row).key);
         present.insert(next.key);
         if (!sameSatellite(m_items.at(row), next)) {
+            const bool sigChanged = !sameSignalState(m_items.at(row), next);
             m_items[row] = next;
             emit changed(row);
             modified = true;
+            if (sigChanged) {
+                emit signalChanged(row);
+                signalModified = true;
+            }
         }
     }
 
@@ -83,8 +98,16 @@ void SatelliteStore::setSatellites(const QList<SatelliteInfo> &satellites) {
         m_items.append(*incoming.value(sat.key));
         emit inserted();
         modified = true;
+        signalModified = true;
     }
 
+    if (m_items.size() != oldSize) {
+        emit countChanged();
+    }
+    if (signalModified) {
+        ++m_signalRevision;
+        emit signalRevisionChanged();
+    }
     if (modified) {
         ++m_revision;
         emit revisionChanged();

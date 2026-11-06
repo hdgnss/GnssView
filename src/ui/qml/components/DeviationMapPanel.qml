@@ -110,32 +110,30 @@ GlassPanel {
                     ctx.fillText(root.ringLabel(2), cx + 8, cy - r / 2 - 4)
                     ctx.fillText(root.ringLabel(3), cx + 8, cy - 3 * r / 4 - 4)
                     ctx.fillText(root.ringLabel(4), cx + 8, cy - r - 4)
-                }
-            }
 
-            Repeater {
-                model: deviationMapModel ? deviationMapModel : null
-
-                Rectangle {
-                    required property double eastMeters
-                    required property double northMeters
-                    required property double distanceMeters
-                    required property bool latest
-
-                    readonly property real cx: chart.x + chart.width * 0.5
-                    readonly property real cy: chart.y + chart.height * 0.52
-                    readonly property real maxR: Math.min(chart.width, chart.height) * 0.40
-                    readonly property real scaleDistance: root.maxDistanceValue()
-
-                    width: latest ? 8 : 5
-                    height: width
-                    radius: width * 0.5
-                    color: latest ? theme.accentStrong : Qt.rgba(theme.accentStrong.r, theme.accentStrong.g, theme.accentStrong.b, 0.56)
-                    border.width: latest ? 1 : 0
-                    border.color: latest ? theme.textPrimary : "transparent"
-
-                    x: cx + maxR * (eastMeters / scaleDistance) - width * 0.5
-                    y: cy - maxR * (northMeters / scaleDistance) - height * 0.5
+                    var points = deviationMapModel ? deviationMapModel.canvasPoints(cx, cy, r) : []
+                    ctx.fillStyle = Qt.rgba(theme.accentStrong.r, theme.accentStrong.g, theme.accentStrong.b, 0.56)
+                    for (var p = 0; p < points.length; ++p) {
+                        var pt = points[p]
+                        if (pt.latest) {
+                            continue
+                        }
+                        ctx.beginPath()
+                        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+                    if (points.length > 0) {
+                        var latestPt = points[points.length - 1]
+                        if (latestPt.latest) {
+                            ctx.beginPath()
+                            ctx.arc(latestPt.x, latestPt.y, 4.0, 0, Math.PI * 2)
+                            ctx.fillStyle = theme.accentStrong
+                            ctx.fill()
+                            ctx.lineWidth = 1
+                            ctx.strokeStyle = theme.textPrimary
+                            ctx.stroke()
+                        }
+                    }
                 }
             }
 

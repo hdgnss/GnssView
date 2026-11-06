@@ -36,17 +36,10 @@ GlassPanel {
 
     function satCount(constellationName) {
         void root.modelRevision
-        if (!satelliteModel || satelliteModel.count === undefined) {
+        if (!satelliteModel || !satelliteModel.constellationCounts) {
             return 0
         }
-        var count = 0
-        for (var i = 0; i < satelliteModel.count; ++i) {
-            var item = satelliteModel.get(i)
-            if (item && item.constellation === constellationName) {
-                count += 1
-            }
-        }
-        return count
+        return Number(satelliteModel.constellationCounts[constellationName] || 0)
     }
 
     function satelliteBandGroup(item) {
@@ -56,21 +49,11 @@ GlassPanel {
 
     function bandStats(groupName) {
         void root.modelRevision
-        var stats = { used: 0, view: 0 }
-        if (!satelliteModel || satelliteModel.count === undefined) {
-            return stats
+        if (!satelliteModel || !satelliteModel.bandStats) {
+            return { used: 0, view: 0 }
         }
-        for (var i = 0; i < satelliteModel.count; ++i) {
-            var item = satelliteModel.get(i)
-            if (groupName !== "ALL" && root.satelliteBandGroup(item) !== groupName) {
-                continue
-            }
-            stats.view += 1
-            if (item && item.usedInFix === true) {
-                stats.used += 1
-            }
-        }
-        return stats
+        var key = String(groupName || "UN").toUpperCase()
+        return satelliteModel.bandStats[key] || { used: 0, view: 0 }
     }
 
     function statLabelText(label) {

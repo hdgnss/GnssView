@@ -29,6 +29,19 @@ namespace {
 
 constexpr int kMaxControllerSatellites = 512;
 
+QString protocolPluginSettingsId(QObject *pluginObject) {
+    if (!pluginObject) {
+        return {};
+    }
+    if (IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(pluginObject)) {
+        const QString settingsId = configurable->settingsId().trimmed();
+        if (!settingsId.isEmpty()) {
+            return settingsId;
+        }
+    }
+    return QStringLiteral("com.hdgnss.protocol.%1").arg(pluginObject->metaObject()->className()).toLower();
+}
+
 QVariantMap protocolPluginDescriptor(QObject *pluginObject, AppSettings *settings) {
     QVariantMap descriptor;
     if (!pluginObject) {
@@ -36,9 +49,7 @@ QVariantMap protocolPluginDescriptor(QObject *pluginObject, AppSettings *setting
     }
 
     IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(pluginObject);
-    const QString pluginId = configurable
-        ? configurable->settingsId().trimmed()
-        : QStringLiteral("com.hdgnss.protocol.%1").arg(pluginObject->metaObject()->className()).toLower();
+    const QString pluginId = protocolPluginSettingsId(pluginObject);
     const QString displayName = configurable
         ? configurable->settingsDisplayName().trimmed()
         : QString::fromLatin1(pluginObject->metaObject()->className());
@@ -193,13 +204,10 @@ AppController::AppController(AppSettings *settings, QObject *parent)
             QMetaObject::invokeMethod(this, &AppController::reloadAutomationPlugins, Qt::QueuedConnection);
             QMetaObject::invokeMethod(&m_transportViewModel, &TransportViewModel::reloadTransportPlugins, Qt::QueuedConnection);
         });
-        connect(m_settings, &AppSettings::pluginSettingsChanged, this, [this]() {
-            QMetaObject::invokeMethod(this, &AppController::reloadProtocolPlugins, Qt::QueuedConnection);
-        });
-        connect(m_settings, &AppSettings::pluginAvailabilityChanged, &m_transportViewModel, &TransportViewModel::reloadTransportPlugins);
-        connect(m_settings, &AppSettings::pluginAvailabilityChanged, this, [this]() {
-            QMetaObject::invokeMethod(this, &AppController::reloadAutomationPlugins, Qt::QueuedConnection);
-        });
+        connect(m_settings, &AppSettings::pluginSettingsChanged,
+                this, &AppController::applyProtocolPluginSettings, Qt::QueuedConnection);
+        connect(m_settings, &AppSettings::pluginAvailabilityChanged,
+                this, &AppController::handlePluginAvailabilityChanged, Qt::QueuedConnection);
         connect(m_settings, &AppSettings::useFixedDeviationCenterChanged, this, [this]() {
             m_deviationMapModel.setFixedCenterEnabled(m_settings->useFixedDeviationCenter());
         });
@@ -773,6 +781,7 @@ void AppController::clearUiState() {
     m_diagnosticsDirty = false;
     m_protocolInfoDirty = false;
     m_satellitesDirty = false;
+    m_deviationDirty = false;
     if (m_tecMapOverlayModel) {
         m_tecMapOverlayModel->setObservationTime({});
     }
@@ -913,6 +922,71 @@ void AppController::reloadAutomationPlugins() {
 
     m_availableAutomationPlugins = descriptors;
     emit availableAutomationPluginsChanged();
+}
+
+void AppController::applyProtocolPluginSettings(const QString &pluginId) {
+    const QString cleanedId = pluginId.trimmed();
+    bool matched = false;
+    for (QObject *pluginObject : m_protocolPluginLoader.pluginObjects()) {
+        if (!pluginObject) {
+            continue;
+        }
+        const QString currentId = protocolPluginSettingsId(pluginObject);
+        if (!cleanedId.isEmpty() && currentId.compare(cleanedId, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        matched = true;
+        if (IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(pluginObject)) {
+            configurable->applySettings(m_settings ? m_settings->pluginPrivateSettings(currentId) : QVariantMap{});
+        }
+    }
+    if (matched || cleanedId.isEmpty()) {
+        rebuildAvailableProtocolPlugins();
+    }
+}
+
+void AppController::handlePluginAvailabilityChanged(const QString &pluginId) {
+    const QString cleanedId = pluginId.trimmed();
+    if (cleanedId.isEmpty() || ownsProtocolPluginSettingsId(cleanedId)) {
+        reloadProtocolPlugins();
+    }
+    if (cleanedId.isEmpty() || ownsAutomationPluginSettingsId(cleanedId)) {
+        reloadAutomationPlugins();
+    }
+}
+
+bool AppController::ownsProtocolPluginSettingsId(const QString &pluginId) const {
+    const QString cleanedId = pluginId.trimmed();
+    if (cleanedId.isEmpty()) {
+        return false;
+    }
+    if (cleanedId.startsWith(QStringLiteral("com.hdgnss.protocol."), Qt::CaseInsensitive)) {
+        return true;
+    }
+    for (QObject *pluginObject : m_protocolPluginLoader.pluginObjects()) {
+        if (protocolPluginSettingsId(pluginObject).compare(cleanedId, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AppController::ownsAutomationPluginSettingsId(const QString &pluginId) const {
+    const QString cleanedId = pluginId.trimmed();
+    if (cleanedId.isEmpty()) {
+        return false;
+    }
+    if (cleanedId.startsWith(QStringLiteral("com.hdgnss.automation."), Qt::CaseInsensitive)) {
+        return true;
+    }
+    const QList<IAutomationPlugin *> plugins = m_automationPluginLoader.plugins();
+    const QList<QObject *> pluginObjects = m_automationPluginLoader.pluginObjects();
+    for (int index = 0; index < plugins.size() && index < pluginObjects.size(); ++index) {
+        if (automationPluginId(plugins.at(index), pluginObjects.at(index)).compare(cleanedId, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void AppController::rebuildAvailableProtocolPlugins() {
@@ -1284,7 +1358,8 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
     if (isLocationQualityMessage(message)) {
         m_location.quality = fields.value(QStringLiteral("quality")).toInt();
     }
-    if (fields.constFind(QStringLiteral("utcTime")) != fields.cend()) {
+    const bool hasUtcTimeField = fields.constFind(QStringLiteral("utcTime")) != fields.cend();
+    if (hasUtcTimeField) {
         m_location.utcTime = locationUtcTime(message, m_location.utcTime);
     }
     assignDouble(QStringLiteral("latitude"), m_location.latitude);
@@ -1386,7 +1461,7 @@ void AppController::applyProtocolMessage(const ProtocolMessage &message) {
     }
 
     m_locationDirty = true;
-    if (m_tecMapOverlayModel) {
+    if (hasUtcTimeField && m_tecMapOverlayModel) {
         m_tecMapOverlayModel->setObservationTime(m_location.utcTime);
     }
     recordDeviationSample(message);
@@ -1411,15 +1486,17 @@ void AppController::recordDeviationSample(const ProtocolMessage &message) {
 
     if (sampleUtcTime.isValid() && m_lastDeviationSampleUtcTime.isValid() && sampleUtcTime == m_lastDeviationSampleUtcTime) {
         if (priority > m_lastDeviationSamplePriority
-            && m_deviationMapModel.updateLastSample(m_location.latitude, m_location.longitude)) {
+            && m_deviationMapModel.updateLastSample(m_location.latitude, m_location.longitude, true)) {
             m_lastDeviationSamplePriority = priority;
+            m_deviationDirty = true;
         }
         return;
     }
 
-    m_deviationMapModel.addSample(m_location.latitude, m_location.longitude);
+    m_deviationMapModel.addSample(m_location.latitude, m_location.longitude, true);
     m_lastDeviationSampleUtcTime = sampleUtcTime;
     m_lastDeviationSamplePriority = priority;
+    m_deviationDirty = true;
 }
 
 void AppController::pruneSatelliteCache(qint64 nowMs) {
@@ -1437,6 +1514,10 @@ void AppController::flushUiRefresh() {
     if (m_satellitesDirty) {
         refreshSatellites();
         m_satellitesDirty = false;
+    }
+    if (m_deviationDirty) {
+        m_deviationMapModel.flushDeferredNotifications();
+        m_deviationDirty = false;
     }
     if (m_locationDirty) {
         emit locationChanged();

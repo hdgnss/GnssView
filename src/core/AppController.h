@@ -214,6 +214,10 @@ private:
     void clearUiState();
     void reloadProtocolPlugins();
     void reloadAutomationPlugins();
+    void applyProtocolPluginSettings(const QString &pluginId);
+    void handlePluginAvailabilityChanged(const QString &pluginId);
+    bool ownsProtocolPluginSettingsId(const QString &pluginId) const;
+    bool ownsAutomationPluginSettingsId(const QString &pluginId) const;
     void registerProtocolPlugin(IProtocolPlugin &plugin);
     void rebuildAvailableProtocolPlugins();
     void registerProtocolInfoPanels(const QList<ProtocolInfoPanel> &panels);
@@ -282,6 +286,7 @@ private:
     bool m_diagnosticsDirty = false;
     bool m_protocolInfoDirty = false;
     bool m_satellitesDirty = false;
+    bool m_deviationDirty = false;
     bool m_shuttingDown = false;
 };
 

@@ -1,5 +1,7 @@
 #include "DeviationMapModel.h"
 
+#include <QSet>
+
 #include <algorithm>
 #include <cmath>
 
@@ -27,15 +29,12 @@ QVariantMap emptyDistanceStats() {
     return stats;
 }
 
-}
-
-DeviationMapModel::DeviationMapModel(QObject *parent)
-    : QAbstractListModel(parent) {
-    m_stats = {
+QVariantMap defaultStats(bool fixedCenterEnabled, double fixedLatitude, double fixedLongitude) {
+    return {
         {QStringLiteral("points"), 0},
-        {QStringLiteral("centerMode"), QStringLiteral("Average")},
-        {QStringLiteral("centerLatitude"), 0.0},
-        {QStringLiteral("centerLongitude"), 0.0},
+        {QStringLiteral("centerMode"), fixedCenterEnabled ? QStringLiteral("Fixed") : QStringLiteral("Average")},
+        {QStringLiteral("centerLatitude"), fixedCenterEnabled ? fixedLatitude : 0.0},
+        {QStringLiteral("centerLongitude"), fixedCenterEnabled ? fixedLongitude : 0.0},
         {QStringLiteral("maxDistance"), 1.0},
         {QStringLiteral("horizontal"), emptyDistanceStats()},
         {QStringLiteral("latitude"), emptyAxisStats()},
@@ -43,11 +42,26 @@ DeviationMapModel::DeviationMapModel(QObject *parent)
     };
 }
 
+quint64 packQuantizedCanvasCell(double x, double y) {
+    // Quantize to 0.5px buckets so overlapping historical points are deduplicated.
+    const qint32 qx = static_cast<qint32>(std::llround(x * 2.0));
+    const qint32 qy = static_cast<qint32>(std::llround(y * 2.0));
+    return (static_cast<quint64>(static_cast<quint32>(qx)) << 32)
+        | static_cast<quint32>(qy);
+}
+
+}  // namespace
+
+DeviationMapModel::DeviationMapModel(QObject *parent)
+    : QAbstractListModel(parent)
+    , m_stats(defaultStats(false, 0.0, 0.0)) {}
+
 int DeviationMapModel::rowCount(const QModelIndex &parent) const {
-    return parent.isValid() ? 0 : m_samples.size();
+    return parent.isValid() ? 0 : static_cast<int>(m_rawSamples.size());
 }
 
 QVariant DeviationMapModel::data(const QModelIndex &index, int role) const {
+    ensureCalculated();
     if (!index.isValid() || index.row() < 0 || index.row() >= m_samples.size()) {
         return {};
     }
@@ -73,6 +87,7 @@ QHash<int, QByteArray> DeviationMapModel::roleNames() const {
 }
 
 QVariantMap DeviationMapModel::get(int row) const {
+    ensureCalculated();
     if (row < 0 || row >= m_samples.size()) {
         return {};
     }
@@ -86,35 +101,95 @@ QVariantMap DeviationMapModel::get(int row) const {
     };
 }
 
+QVariantList DeviationMapModel::canvasPoints(double centerX, double centerY, double maxRadius) const {
+    ensureCalculated();
+    if (m_samples.isEmpty() || !std::isfinite(centerX) || !std::isfinite(centerY)
+        || !std::isfinite(maxRadius) || maxRadius <= 0.0) {
+        return {};
+    }
+
+    const double scaleDistance = std::max(1.0, m_stats.value(QStringLiteral("maxDistance")).toDouble());
+    const double metersToPixels = maxRadius / scaleDistance;
+    const int totalCount = m_samples.size();
+
+    QVariantList points;
+    points.reserve(std::min(totalCount, 2048));
+    QSet<quint64> seenCells;
+    seenCells.reserve(std::min(totalCount, 2048));
+
+    for (int i = 0; i < totalCount - 1; ++i) {
+        const DeviationSample &sample = m_samples.at(i);
+        const double px = centerX + sample.eastMeters * metersToPixels;
+        const double py = centerY - sample.northMeters * metersToPixels;
+        const quint64 cellKey = packQuantizedCanvasCell(px, py);
+        if (seenCells.contains(cellKey)) {
+            continue;
+        }
+        seenCells.insert(cellKey);
+        points.append(QVariantMap{
+            {QStringLiteral("x"), px},
+            {QStringLiteral("y"), py},
+            {QStringLiteral("latest"), false}
+        });
+    }
+
+    const DeviationSample &latestSample = m_samples.constLast();
+    points.append(QVariantMap{
+        {QStringLiteral("x"), centerX + latestSample.eastMeters * metersToPixels},
+        {QStringLiteral("y"), centerY - latestSample.northMeters * metersToPixels},
+        {QStringLiteral("latest"), true}
+    });
+    return points;
+}
+
 void DeviationMapModel::clear() {
-    if (m_rawSamples.isEmpty() && m_samples.isEmpty()) {
+    if (m_rawSamples.empty() && m_samples.isEmpty() && !m_calculationDirty && !m_notificationsDeferred) {
         return;
     }
     beginResetModel();
     m_rawSamples.clear();
     m_samples.clear();
+    m_distanceScratch.clear();
+    m_stats = defaultStats(m_fixedCenterEnabled, m_fixedLatitude, m_fixedLongitude);
+    m_calculationDirty = false;
+    m_notificationsDeferred = false;
     endResetModel();
-    recalculate();
+
+    ++m_revision;
+    emit countChanged();
+    emit revisionChanged();
+    emit statsChanged();
 }
 
-void DeviationMapModel::addSample(double latitude, double longitude) {
+void DeviationMapModel::addSample(double latitude, double longitude, bool deferNotify) {
     if (!std::isfinite(latitude) || !std::isfinite(longitude)) {
         return;
     }
-    m_rawSamples.append({latitude, longitude});
+    m_rawSamples.push_back({latitude, longitude});
     trimRawSamples();
-    recalculate();
+    markDirty(deferNotify);
 }
 
-bool DeviationMapModel::updateLastSample(double latitude, double longitude) {
-    if (!std::isfinite(latitude) || !std::isfinite(longitude) || m_rawSamples.isEmpty()) {
+bool DeviationMapModel::updateLastSample(double latitude, double longitude, bool deferNotify) {
+    if (!std::isfinite(latitude) || !std::isfinite(longitude) || m_rawSamples.empty()) {
         return false;
     }
-    RawSample &lastSample = m_rawSamples.last();
+    RawSample &lastSample = m_rawSamples.back();
     lastSample.latitude = latitude;
     lastSample.longitude = longitude;
-    recalculate();
+    markDirty(deferNotify);
     return true;
+}
+
+void DeviationMapModel::flushDeferredNotifications() {
+    if (!m_notificationsDeferred) {
+        return;
+    }
+    m_notificationsDeferred = false;
+    ++m_revision;
+    emit countChanged();
+    emit revisionChanged();
+    emit statsChanged();
 }
 
 void DeviationMapModel::setFixedCenterEnabled(bool enabled) {
@@ -122,7 +197,7 @@ void DeviationMapModel::setFixedCenterEnabled(bool enabled) {
         return;
     }
     m_fixedCenterEnabled = enabled;
-    recalculate();
+    markDirty(false);
 }
 
 void DeviationMapModel::setFixedCenter(double latitude, double longitude) {
@@ -132,7 +207,7 @@ void DeviationMapModel::setFixedCenter(double latitude, double longitude) {
     }
     m_fixedLatitude = latitude;
     m_fixedLongitude = longitude;
-    recalculate();
+    markDirty(false);
 }
 
 int DeviationMapModel::revision() const {
@@ -140,20 +215,21 @@ int DeviationMapModel::revision() const {
 }
 
 QVariantMap DeviationMapModel::stats() const {
+    ensureCalculated();
     return m_stats;
 }
 
 #ifdef HDGNSS_REGRESSION_TESTS
 int DeviationMapModel::regressionRawSampleCount() const {
-    return m_rawSamples.size();
+    return static_cast<int>(m_rawSamples.size());
 }
 
 QVariantMap DeviationMapModel::regressionRawSample(int index) const {
-    if (index < 0 || index >= m_rawSamples.size()) {
+    if (index < 0 || index >= static_cast<int>(m_rawSamples.size())) {
         return {};
     }
 
-    const RawSample &sample = m_rawSamples.at(index);
+    const RawSample &sample = m_rawSamples[static_cast<size_t>(index)];
     return {
         {QStringLiteral("latitude"), sample.latitude},
         {QStringLiteral("longitude"), sample.longitude}
@@ -163,181 +239,200 @@ QVariantMap DeviationMapModel::regressionRawSample(int index) const {
 void DeviationMapModel::regressionFillRawSamplesForCapTest(int count) {
     m_rawSamples.clear();
     for (int i = 0; i < count; ++i) {
-        m_rawSamples.append({31.0 + i * 0.000001, 121.0 + i * 0.000001});
+        m_rawSamples.push_back({31.0 + i * 0.000001, 121.0 + i * 0.000001});
     }
     trimRawSamples();
-    recalculate();
+    markDirty(false);
 }
 #endif
 
 void DeviationMapModel::trimRawSamples() {
-    if (m_rawSamples.size() <= kMaxSamples) {
-        return;
+    while (static_cast<int>(m_rawSamples.size()) > kMaxSamples) {
+        m_rawSamples.pop_front();
     }
-    m_rawSamples.remove(0, m_rawSamples.size() - kMaxSamples);
 }
 
-void DeviationMapModel::recalculate() {
-    const int oldCount = m_samples.size();
-
-    // Compute center
-    double centerLatitude = 0.0;
-    double centerLongitude = 0.0;
-    if (!m_rawSamples.isEmpty()) {
-        if (m_fixedCenterEnabled) {
-            centerLatitude = m_fixedLatitude;
-            centerLongitude = m_fixedLongitude;
-        } else {
-            for (const RawSample &sample : std::as_const(m_rawSamples)) {
-                centerLatitude += sample.latitude;
-                centerLongitude += sample.longitude;
-            }
-            centerLatitude /= m_rawSamples.size();
-            centerLongitude /= m_rawSamples.size();
-        }
+void DeviationMapModel::markDirty(bool deferNotify) {
+    m_calculationDirty = true;
+    if (deferNotify) {
+        m_notificationsDeferred = true;
+        return;
     }
-
-    // Project all raw samples into metric deviations
-    QList<DeviationSample> newSamples;
-    QList<double> eastValues;
-    QList<double> northValues;
-    QList<double> distances;
-    newSamples.reserve(m_rawSamples.size());
-    eastValues.reserve(m_rawSamples.size());
-    northValues.reserve(m_rawSamples.size());
-    distances.reserve(m_rawSamples.size());
-
-    const double centerLatRad = centerLatitude * kPi / 180.0;
-    for (const RawSample &sample : std::as_const(m_rawSamples)) {
-        const double northMeters = (sample.latitude - centerLatitude) * kPi / 180.0 * kEarthRadiusMeters;
-        const double eastMeters = (sample.longitude - centerLongitude) * kPi / 180.0 * kEarthRadiusMeters * std::cos(centerLatRad);
-        const double distanceMeters = std::hypot(eastMeters, northMeters);
-        newSamples.append({eastMeters, northMeters, distanceMeters});
-        eastValues.append(eastMeters);
-        northValues.append(northMeters);
-        distances.append(distanceMeters);
-    }
-
-    const int newCount = newSamples.size();
-
-    // Apply model changes with the narrowest possible notification scope
-    if (newCount == oldCount + 1) {
-        // One sample appended: update existing row data in-place, then insert the new row.
-        // The in-place update is needed because adding a point shifts the average center.
-        for (int i = 0; i < oldCount; ++i) {
-            m_samples[i] = newSamples[i];
-        }
-        beginInsertRows(QModelIndex(), oldCount, oldCount);
-        m_samples.append(newSamples.last());
-        endInsertRows();
-        // Notify after insert so LatestRole for old last row evaluates correctly (false).
-        if (oldCount > 0) {
-            emit dataChanged(index(0), index(oldCount - 1),
-                {EastMetersRole, NorthMetersRole, DistanceMetersRole, LatestRole});
-        }
-    } else if (newCount == oldCount && newCount > 0) {
-        // Same count but values changed (center move or updateLastSample).
-        m_samples = std::move(newSamples);
-        emit dataChanged(index(0), index(newCount - 1),
-            {EastMetersRole, NorthMetersRole, DistanceMetersRole, LatestRole});
-    } else if (newCount == 0 && oldCount == 0) {
-        // Nothing to do — called after clear() which already reset the model.
-    } else {
-        // Fallback for any unexpected size transition.
-        beginResetModel();
-        m_samples = std::move(newSamples);
-        endResetModel();
-    }
-
-    // Update aggregate statistics
-    m_stats = {
-        {QStringLiteral("points"), m_samples.size()},
-        {QStringLiteral("centerMode"), m_fixedCenterEnabled ? QStringLiteral("Fixed") : QStringLiteral("Average")},
-        {QStringLiteral("centerLatitude"), centerLatitude},
-        {QStringLiteral("centerLongitude"), centerLongitude},
-        {QStringLiteral("maxDistance"), 1.0},
-        {QStringLiteral("horizontal"), buildDistanceStats(distances)},
-        {QStringLiteral("latitude"), buildAxisStats(northValues)},
-        {QStringLiteral("longitude"), buildAxisStats(eastValues)}
-    };
-
-    if (distances.isEmpty()) {
-        m_stats.insert(QStringLiteral("maxDistance"), 1.0);
-        m_stats.insert(QStringLiteral("horizontal"), emptyDistanceStats());
-        m_stats.insert(QStringLiteral("latitude"), emptyAxisStats());
-        m_stats.insert(QStringLiteral("longitude"), emptyAxisStats());
-    } else {
-        const auto maxIt = std::max_element(distances.cbegin(), distances.cend());
-        m_stats.insert(QStringLiteral("maxDistance"), qMax(1.0, std::ceil(*maxIt)));
-    }
-
+    m_notificationsDeferred = false;
     ++m_revision;
     emit countChanged();
     emit revisionChanged();
     emit statsChanged();
 }
 
-QVariantMap DeviationMapModel::buildAxisStats(const QList<double> &values) {
-    if (values.isEmpty()) {
-        return emptyAxisStats();
+void DeviationMapModel::ensureCalculated() const {
+    if (!m_calculationDirty) {
+        return;
+    }
+    m_calculationDirty = false;
+
+    const int count = static_cast<int>(m_rawSamples.size());
+    if (count == 0) {
+        m_samples.clear();
+        m_distanceScratch.clear();
+        m_stats = defaultStats(m_fixedCenterEnabled, m_fixedLatitude, m_fixedLongitude);
+        return;
     }
 
-    double minValue = values.first();
-    double maxValue = values.first();
-    double sum = 0.0;
-    for (double value : values) {
-        minValue = std::min(minValue, value);
-        maxValue = std::max(maxValue, value);
-        sum += value;
+    double centerLatitude = 0.0;
+    double centerLongitude = 0.0;
+    if (m_fixedCenterEnabled) {
+        centerLatitude = m_fixedLatitude;
+        centerLongitude = m_fixedLongitude;
+    } else {
+        for (const RawSample &sample : m_rawSamples) {
+            centerLatitude += sample.latitude;
+            centerLongitude += sample.longitude;
+        }
+        centerLatitude /= count;
+        centerLongitude /= count;
     }
-    const double average = sum / values.size();
 
-    double variance = 0.0;
-    for (double value : values) {
-        const double delta = value - average;
-        variance += delta * delta;
+    m_samples.resize(count);
+    m_distanceScratch.resize(static_cast<size_t>(count));
+
+    const double degToMeters = kPi / 180.0 * kEarthRadiusMeters;
+    const double eastDegToMeters = degToMeters * std::cos(centerLatitude * kPi / 180.0);
+
+    double eastMin = 0.0;
+    double eastMax = 0.0;
+    double eastSum = 0.0;
+    double northMin = 0.0;
+    double northMax = 0.0;
+    double northSum = 0.0;
+    double distMin = 0.0;
+    double distMax = 0.0;
+    double distSum = 0.0;
+
+    for (int i = 0; i < count; ++i) {
+        const RawSample &raw = m_rawSamples[static_cast<size_t>(i)];
+        const double northMeters = (raw.latitude - centerLatitude) * degToMeters;
+        const double eastMeters = (raw.longitude - centerLongitude) * eastDegToMeters;
+        const double distanceMeters = std::hypot(eastMeters, northMeters);
+
+        m_samples[i] = {eastMeters, northMeters, distanceMeters};
+        m_distanceScratch[static_cast<size_t>(i)] = distanceMeters;
+
+        if (i == 0) {
+            eastMin = eastMax = eastSum = eastMeters;
+            northMin = northMax = northSum = northMeters;
+            distMin = distMax = distSum = distanceMeters;
+        } else {
+            eastMin = std::min(eastMin, eastMeters);
+            eastMax = std::max(eastMax, eastMeters);
+            eastSum += eastMeters;
+            northMin = std::min(northMin, northMeters);
+            northMax = std::max(northMax, northMeters);
+            northSum += northMeters;
+            distMin = std::min(distMin, distanceMeters);
+            distMax = std::max(distMax, distanceMeters);
+            distSum += distanceMeters;
+        }
     }
-    variance /= values.size();
 
-    return {
-        {QStringLiteral("min"), minValue},
-        {QStringLiteral("max"), maxValue},
-        {QStringLiteral("avg"), average},
-        {QStringLiteral("stdDev"), std::sqrt(variance)}
+    const double eastAvg = eastSum / count;
+    const double northAvg = northSum / count;
+    const double distAvg = distSum / count;
+
+    double eastVariance = 0.0;
+    double northVariance = 0.0;
+    double distVariance = 0.0;
+    for (int i = 0; i < count; ++i) {
+        const DeviationSample &sample = m_samples.at(i);
+        const double de = sample.eastMeters - eastAvg;
+        const double dn = sample.northMeters - northAvg;
+        const double dd = sample.distanceMeters - distAvg;
+        eastVariance += de * de;
+        northVariance += dn * dn;
+        distVariance += dd * dd;
+    }
+    eastVariance /= count;
+    northVariance /= count;
+    distVariance /= count;
+
+    int low50 = 0;
+    int low68 = 0;
+    const double cep50 = percentileFromPartitioned(m_distanceScratch, 0, 0.50, &low50);
+    const double cep68 = percentileFromPartitioned(m_distanceScratch, low50, 0.68, &low68);
+    const double cep95 = percentileFromPartitioned(m_distanceScratch, low68, 0.95);
+
+    const QVariantMap horizontalStats = {
+        {QStringLiteral("min"), distMin},
+        {QStringLiteral("max"), distMax},
+        {QStringLiteral("avg"), distAvg},
+        {QStringLiteral("stdDev"), std::sqrt(distVariance)},
+        {QStringLiteral("cep50"), cep50},
+        {QStringLiteral("cep68"), cep68},
+        {QStringLiteral("cep95"), cep95}
+    };
+    const QVariantMap latitudeStats = {
+        {QStringLiteral("min"), northMin},
+        {QStringLiteral("max"), northMax},
+        {QStringLiteral("avg"), northAvg},
+        {QStringLiteral("stdDev"), std::sqrt(northVariance)}
+    };
+    const QVariantMap longitudeStats = {
+        {QStringLiteral("min"), eastMin},
+        {QStringLiteral("max"), eastMax},
+        {QStringLiteral("avg"), eastAvg},
+        {QStringLiteral("stdDev"), std::sqrt(eastVariance)}
+    };
+
+    m_stats = {
+        {QStringLiteral("points"), count},
+        {QStringLiteral("centerMode"), m_fixedCenterEnabled ? QStringLiteral("Fixed") : QStringLiteral("Average")},
+        {QStringLiteral("centerLatitude"), centerLatitude},
+        {QStringLiteral("centerLongitude"), centerLongitude},
+        {QStringLiteral("maxDistance"), qMax(1.0, std::ceil(distMax))},
+        {QStringLiteral("horizontal"), horizontalStats},
+        {QStringLiteral("latitude"), latitudeStats},
+        {QStringLiteral("longitude"), longitudeStats}
     };
 }
 
-QVariantMap DeviationMapModel::buildDistanceStats(const QList<double> &values) {
-    if (values.isEmpty()) {
-        return emptyDistanceStats();
-    }
-
-    QVariantMap stats = buildAxisStats(values);
-    QList<double> sorted = values;
-    std::sort(sorted.begin(), sorted.end());
-    stats.insert(QStringLiteral("cep50"), percentile(sorted, 0.50));
-    stats.insert(QStringLiteral("cep68"), percentile(sorted, 0.68));
-    stats.insert(QStringLiteral("cep95"), percentile(sorted, 0.95));
-    return stats;
-}
-
-double DeviationMapModel::percentile(const QList<double> &sortedValues, double ratio) {
-    if (sortedValues.isEmpty()) {
+double DeviationMapModel::percentileFromPartitioned(std::vector<double> &values,
+                                                    int startOffset,
+                                                    double ratio,
+                                                    int *lowerIndexOut) {
+    if (values.empty()) {
+        if (lowerIndexOut) {
+            *lowerIndexOut = 0;
+        }
         return 0.0;
     }
-    if (sortedValues.size() == 1) {
-        return sortedValues.first();
+    if (values.size() == 1) {
+        if (lowerIndexOut) {
+            *lowerIndexOut = 0;
+        }
+        return values.front();
     }
 
     const double clampedRatio = std::clamp(ratio, 0.0, 1.0);
-    const double position = clampedRatio * static_cast<double>(sortedValues.size() - 1);
+    const double position = clampedRatio * static_cast<double>(values.size() - 1);
     const int lowerIndex = static_cast<int>(std::floor(position));
     const int upperIndex = static_cast<int>(std::ceil(position));
-    if (lowerIndex == upperIndex) {
-        return sortedValues.at(lowerIndex);
+    const int safeStart = std::clamp(startOffset, 0, lowerIndex);
+
+    std::nth_element(values.begin() + safeStart,
+                     values.begin() + lowerIndex,
+                     values.end());
+    if (lowerIndexOut) {
+        *lowerIndexOut = lowerIndex;
     }
+
+    const double lowerValue = values[static_cast<size_t>(lowerIndex)];
+    if (lowerIndex == upperIndex) {
+        return lowerValue;
+    }
+
+    const double upperValue = *std::min_element(values.begin() + lowerIndex + 1, values.end());
     const double weight = position - lowerIndex;
-    return sortedValues.at(lowerIndex) * (1.0 - weight) + sortedValues.at(upperIndex) * weight;
+    return lowerValue * (1.0 - weight) + upperValue * weight;
 }
 
 }  // namespace hdgnss

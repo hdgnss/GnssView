@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QVariantMap>
 
 #include "src/models/SatelliteStore.h"
 #include "src/protocols/GnssTypes.h"
@@ -11,6 +12,8 @@ class SatelliteModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
+    Q_PROPERTY(QVariantMap constellationCounts READ constellationCounts NOTIFY revisionChanged)
+    Q_PROPERTY(QVariantMap bandStats READ bandStats NOTIFY revisionChanged)
 
 public:
     enum Roles {
@@ -39,14 +42,20 @@ public:
     SatelliteStore *store() const;
     void setSatellites(const QList<SatelliteInfo> &satellites);
     int revision() const;
+    QVariantMap constellationCounts() const;
+    QVariantMap bandStats() const;
 
 signals:
     void countChanged();
     void revisionChanged();
 
 private:
+    void rebuildSummaryStats();
+
     SatelliteStore *m_store = nullptr;
     SatelliteStore m_ownStore;
+    QVariantMap m_constellationCounts;
+    QVariantMap m_bandStats;
 };
 
 }  // namespace hdgnss

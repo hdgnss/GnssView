@@ -112,7 +112,16 @@ void TransportViewModel::setAppSettings(AppSettings *settings) {
     if (m_settings == settings) {
         return;
     }
+    if (m_settings) {
+        disconnect(m_settings, nullptr, this, nullptr);
+    }
     m_settings = settings;
+    if (m_settings) {
+        connect(m_settings, &AppSettings::pluginSettingsChanged,
+                this, &TransportViewModel::applyPluginSettings);
+        connect(m_settings, &AppSettings::pluginAvailabilityChanged,
+                this, &TransportViewModel::handlePluginAvailabilityChanged);
+    }
     reloadTransportPlugins();
 }
 
@@ -173,7 +182,8 @@ QVariantMap TransportViewModel::transportStoredSettings(const QString &transport
         return {};
     }
     QString settingsId = pluginSettingsId(transportName);
-    if (const PluginTransportEntry *entry = findPluginEntry(transportName)) {
+    const PluginTransportEntry *entry = findPluginEntry(transportName);
+    if (entry) {
         if (IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(entry->pluginObject)) {
             const QString configurableId = configurable->settingsId().trimmed();
             if (!configurableId.isEmpty()) {
@@ -181,7 +191,27 @@ QVariantMap TransportViewModel::transportStoredSettings(const QString &transport
             }
         }
     }
-    return m_settings->pluginPrivateSettings(settingsId);
+    QVariantMap stored = m_settings->pluginPrivateSettings(settingsId);
+    if (entry && entry->pluginObject) {
+        const QVariantList fields = configurableFields(entry->pluginObject, settingsId);
+        for (const QVariant &fieldValue : fields) {
+            const QVariantMap field = fieldValue.toMap();
+            const QString key = field.value(QStringLiteral("key")).toString().trimmed();
+            const bool isReadOnly = field.value(QStringLiteral("readOnly")).toBool()
+                || field.value(QStringLiteral("readonly")).toBool();
+            if (key.isEmpty()) {
+                continue;
+            }
+            if (isReadOnly) {
+                stored.remove(key);
+                continue;
+            }
+            if (!stored.contains(key) && field.contains(QStringLiteral("value"))) {
+                stored.insert(key, field.value(QStringLiteral("value")));
+            }
+        }
+    }
+    return stored;
 }
 
 void TransportViewModel::refreshTransportDescriptors() {
@@ -570,6 +600,63 @@ void TransportViewModel::hookTransport(ITransport *transport) {
 void TransportViewModel::handleTransportOpenChanged() {
     setLockedTransport(currentOpenTransportName());
     emit statusesChanged();
+}
+
+void TransportViewModel::applyPluginSettings(const QString &pluginId) {
+    const QString cleanedId = pluginId.trimmed();
+    for (const PluginTransportEntry &entry : std::as_const(m_pluginTransports)) {
+        QString settingsId = pluginSettingsId(entry.transportId);
+        IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(entry.pluginObject);
+        if (configurable) {
+            const QString configurableId = configurable->settingsId().trimmed();
+            if (!configurableId.isEmpty()) {
+                settingsId = configurableId;
+            }
+        }
+        if (!cleanedId.isEmpty() && settingsId.compare(cleanedId, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (configurable) {
+            configurable->applySettings(m_settings ? m_settings->pluginPrivateSettings(settingsId) : QVariantMap{});
+        }
+        emit transportDescriptorChanged(entry.transportId);
+    }
+}
+
+void TransportViewModel::handlePluginAvailabilityChanged(const QString &pluginId) {
+    if (pluginId.trimmed().isEmpty() || ownsPluginSettingsId(pluginId)) {
+        reloadTransportPlugins();
+    }
+}
+
+bool TransportViewModel::ownsPluginSettingsId(const QString &pluginId) const {
+    const QString cleanedId = pluginId.trimmed();
+    if (cleanedId.isEmpty()) {
+        return false;
+    }
+    if (cleanedId.startsWith(QStringLiteral("com.hdgnss.transport."), Qt::CaseInsensitive)) {
+        return true;
+    }
+    const QList<ITransportPlugin *> plugins = m_transportPluginLoader.plugins();
+    const QList<QObject *> pluginObjects = m_transportPluginLoader.pluginObjects();
+    for (int index = 0; index < plugins.size() && index < pluginObjects.size(); ++index) {
+        ITransportPlugin *plugin = plugins.at(index);
+        QObject *pluginObject = pluginObjects.at(index);
+        if (!plugin || !pluginObject) {
+            continue;
+        }
+        QString settingsId = pluginSettingsId(plugin->transportId());
+        if (IConfigurablePlugin *configurable = qobject_cast<IConfigurablePlugin *>(pluginObject)) {
+            const QString configurableId = configurable->settingsId().trimmed();
+            if (!configurableId.isEmpty()) {
+                settingsId = configurableId;
+            }
+        }
+        if (settingsId.compare(cleanedId, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 QString TransportViewModel::currentOpenTransportName() const {
