@@ -10,10 +10,10 @@ ApplicationWindow {
     flags: useThemedChrome
            ? (Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
            : Qt.Window
-    width: 1920
-    height: 1080
-    minimumWidth: 1360
-    minimumHeight: 820
+    width: 1280
+    height: 720
+    minimumWidth: 1280
+    minimumHeight: 720
     color: theme.bgEnd
     title: "GnssView"
     readonly property bool isMac: Qt.platform.os === "osx"
@@ -41,8 +41,8 @@ ApplicationWindow {
     Settings {
         id: windowSettings
         category: "MainWindow"
-        property int widthValue: 1920
-        property int heightValue: 1080
+        property int widthValue: 1280
+        property int heightValue: 720
         property int xValue: 80
         property int yValue: 60
         property bool maximized: false
@@ -388,11 +388,11 @@ ApplicationWindow {
     Item {
         id: grid
         anchors.fill: parent
-        anchors.leftMargin: visibility === Window.Maximized ? 14 : 18
-        anchors.rightMargin: visibility === Window.Maximized ? 14 : 18
-        anchors.bottomMargin: visibility === Window.Maximized ? 14 : 18
+        anchors.leftMargin: visibility === Window.Maximized ? (window.width < 1600 ? 10 : 14) : (window.width < 1600 ? 12 : 18)
+        anchors.rightMargin: visibility === Window.Maximized ? (window.width < 1600 ? 10 : 14) : (window.width < 1600 ? 12 : 18)
+        anchors.bottomMargin: visibility === Window.Maximized ? (window.height < 920 ? 8 : 14) : (window.height < 920 ? 10 : 18)
         anchors.topMargin: window.isMac ? (12 + chromeInsetTop) : 2
-        readonly property int gap: 12
+        readonly property int gap: window.height < 920 ? 8 : 12
         readonly property real unitWidth: (width - gap * 3) / 4
         readonly property real unitHeight: (height - gap * 2) / 3
 

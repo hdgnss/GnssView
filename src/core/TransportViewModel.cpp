@@ -35,6 +35,12 @@ TransportViewModel::TransportViewModel(QObject *parent)
     hookTransport(&m_udp);
     refreshSerialPorts();
     reloadTransportPlugins();
+    connect(&m_uartRefreshTimer, &QTimer::timeout, this, [this]() {
+        if (!transportOpen(QStringLiteral("UART"))) {
+            refreshSerialPorts();
+        }
+    });
+    m_uartRefreshTimer.start(500);
 }
 
 TransportViewModel::~TransportViewModel() {
@@ -243,8 +249,8 @@ void TransportViewModel::refreshSerialPorts() {
     if (ports != m_serialPorts) {
         m_serialPorts = ports;
         emit serialPortsChanged();
+        emit statusesChanged();
     }
-    emit statusesChanged();
 }
 
 void TransportViewModel::refreshUartPorts() {

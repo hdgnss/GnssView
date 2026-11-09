@@ -188,7 +188,8 @@ GlassPanel {
         }
         border.width: 1
         border.color: emphasize ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.50) : theme.panelBorder
-        implicitHeight: compact ? (emphasize ? 54 : 46) : (emphasize ? 64 : 56)
+        implicitHeight: compact ? (emphasize ? 40 : 36) : (emphasize ? 64 : 56)
+        Layout.minimumHeight: compact ? (emphasize ? 34 : 30) : 48
 
         Rectangle {
             anchors {
@@ -215,17 +216,18 @@ GlassPanel {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.leftMargin: compact ? 12 : 14
-            anchors.rightMargin: compact ? 8 : 10
-            anchors.topMargin: compact ? 8 : 10
-            anchors.bottomMargin: compact ? 8 : 10
+            anchors.leftMargin: compact ? 8 : 14
+            anchors.rightMargin: compact ? 6 : 10
+            anchors.topMargin: compact ? 3 : 10
+            anchors.bottomMargin: compact ? 3 : 10
             spacing: compact ? 0 : 1
 
             Label {
                 text: heading
                 color: theme.textSecondary
                 font.family: theme.bodyFont
-                font.pixelSize: compact ? Math.max(10, theme.labelSize - 1) : theme.labelSize
+                font.pixelSize: compact ? Math.max(9, theme.labelSize - 1) : theme.labelSize
+                Layout.alignment: Qt.AlignVCenter
             }
 
             Label {
@@ -233,10 +235,11 @@ GlassPanel {
                 color: theme.textPrimary
                 font.family: theme.monoFont
                 font.pixelSize: compact
-                    ? (emphasize ? theme.bodySize + 2 : theme.bodySize)
+                    ? (emphasize ? theme.bodySize + 1 : theme.bodySize)
                     : (emphasize ? theme.bodySize + 4 : theme.bodySize + 2)
                 font.bold: true
                 elide: Text.ElideRight
+                Layout.alignment: Qt.AlignVCenter
             }
 
             Label {
@@ -244,8 +247,9 @@ GlassPanel {
                 text: subText
                 color: theme.caption
                 font.family: theme.bodyFont
-                font.pixelSize: compact ? Math.max(10, theme.labelSize - 1) : theme.labelSize
+                font.pixelSize: compact ? Math.max(9, theme.labelSize - 1) : theme.labelSize
                 elide: Text.ElideRight
+                Layout.alignment: Qt.AlignVCenter
             }
         }
     }
@@ -659,18 +663,20 @@ GlassPanel {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
+                    anchors.margins: 6
+                    spacing: 4
 
                     GridLayout {
                         Layout.fillWidth: true
+                        Layout.fillHeight: true
                         Layout.alignment: Qt.AlignTop
                         columns: 5
-                        columnSpacing: 6
-                        rowSpacing: 6
+                        columnSpacing: 5
+                        rowSpacing: 4
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Latitude"
                             valueText: locationPage.fixed("latitude", 7, "", "--")
@@ -680,6 +686,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Longitude"
                             valueText: locationPage.fixed("longitude", 7, "", "--")
@@ -689,6 +696,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Speed"
                             valueText: locationPage.fixed("speed", 2, " m/s", "--")
@@ -697,6 +705,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Date"
                             valueText: locationPage.text("utcDate", "---- -- --")
@@ -705,6 +714,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "UTC"
                             valueText: locationPage.text("utcClock", "--:--:--")
@@ -713,6 +723,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Altitude"
                             valueText: locationPage.fixed("altitude", 2, " m", "--")
@@ -721,6 +732,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Quality"
                             valueText: locationPage.integer("quality", "--")
@@ -729,6 +741,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "HDOP"
                             valueText: locationPage.fixed("hdop", 2, "", "--")
@@ -737,6 +750,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Satellites"
                             valueText: locationPage.text("satelliteUsage", "0 / 0")
@@ -745,6 +759,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Age"
                             valueText: locationPage.fixed("age", 1, " s", "--")
@@ -753,6 +768,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Track"
                             valueText: locationPage.fixed("track", 2, "°", "--")
@@ -761,6 +777,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Magnetic"
                             valueText: locationPage.fixed("magneticVariation", 2, "°", "--")
@@ -769,6 +786,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Mode"
                             valueText: locationPage.text("mode", "--")
@@ -777,6 +795,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Status"
                             valueText: locationPage.text("navigationStatus", "--")
@@ -785,6 +804,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Undulation"
                             valueText: locationPage.fixed("undulation", 2, " m", "--")
@@ -793,6 +813,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "GPS"
                             valueText: locationPage.text("gpsSignals", "0 / 0")
@@ -801,6 +822,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "GLONASS"
                             valueText: locationPage.text("glonassSignals", "0 / 0")
@@ -809,6 +831,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Beidou"
                             valueText: locationPage.text("beidouSignals", "0 / 0")
@@ -817,6 +840,7 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Galileo"
                             valueText: locationPage.text("galileoSignals", "0 / 0")
@@ -825,14 +849,13 @@ GlassPanel {
 
                         MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: "Other"
                             valueText: locationPage.text("otherSignals", "0 / 0")
                             accentColor: theme.semanticColor("neutral")
                         }
                     }
-
-                    Item { Layout.fillHeight: true }
                 }
             }
         }

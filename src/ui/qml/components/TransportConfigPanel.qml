@@ -16,6 +16,18 @@ GlassPanel {
     property var transportList: transportViewModel ? transportViewModel.availableTransports : []
     property string lockedTransport: transportViewModel ? transportViewModel.lockedTransport : ""
 
+    Timer {
+        id: uartAutoRefreshTimer
+        interval: 500
+        repeat: true
+        running: !root.isTransportOpenOrLocked("UART")
+        onTriggered: {
+            if (transportViewModel) {
+                transportViewModel.refreshUartPorts()
+            }
+        }
+    }
+
     Settings {
         id: transportSettings
         category: "TransportConfigPanel"
@@ -597,24 +609,16 @@ GlassPanel {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    spacing: theme.sectionSpacing
+                    spacing: 6
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 6
 
-                        SectionTitle { text: "UART Link" }
-                        Item { Layout.fillWidth: true }
-                        NeonButton { text: "Refresh"; onClicked: root.invoke("refreshUartPorts") }
-                    }
-
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: 2
-                        columnSpacing: 8
-                        rowSpacing: 8
-
-                        DenseLabel { text: "Port" }
+                        DenseLabel {
+                            text: "Port"
+                            Layout.preferredWidth: 32
+                        }
                         DenseComboBox {
                             id: uartPort
                             Layout.fillWidth: true
@@ -628,97 +632,68 @@ GlassPanel {
                                 }
                             }
                         }
+                    }
 
-                        DenseLabel { text: "Baud" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        DenseLabel {
+                            text: "Baud"
+                            Layout.preferredWidth: 32
+                        }
                         DenseComboBox {
                             id: uartBaud
                             Layout.fillWidth: true
                             model: ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]
                             onActivated: root.persistSettings()
                         }
-                    }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            DenseLabel {
-                                text: "Data Bits"
-                                Layout.preferredWidth: root.compactLabelWidth
-                                horizontalAlignment: Text.AlignRight
-                            }
-                            DenseComboBox {
-                                id: dataBits
-                                Layout.fillWidth: true
-                                Layout.preferredWidth: 120
-                                model: ["8", "7"]
-                                onActivated: root.persistSettings()
-                            }
+                        DenseLabel {
+                            text: "Data Bits"
                         }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            DenseLabel {
-                                text: "Stop Bits"
-                                Layout.preferredWidth: root.compactLabelWidth
-                                horizontalAlignment: Text.AlignRight
-                            }
-                            DenseComboBox {
-                                id: stopBits
-                                Layout.fillWidth: true
-                                Layout.preferredWidth: 120
-                                model: ["1", "2"]
-                                onActivated: root.persistSettings()
-                            }
+                        DenseComboBox {
+                            id: dataBits
+                            Layout.preferredWidth: 64
+                            model: ["8", "7"]
+                            onActivated: root.persistSettings()
                         }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 5
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            DenseLabel {
-                                text: "Parity"
-                                Layout.preferredWidth: root.compactLabelWidth
-                                horizontalAlignment: Text.AlignRight
-                            }
-                            DenseComboBox {
-                                id: parity
-                                Layout.fillWidth: true
-                                Layout.preferredWidth: 120
-                                model: ["None", "Even", "Odd"]
-                                onActivated: root.persistSettings()
-                            }
+                        DenseLabel {
+                            text: "Stop"
+                            Layout.preferredWidth: 32
+                        }
+                        DenseComboBox {
+                            id: stopBits
+                            Layout.preferredWidth: 48
+                            model: ["1", "2"]
+                            onActivated: root.persistSettings()
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            DenseLabel {
-                                text: "Flow"
-                                Layout.preferredWidth: root.compactLabelWidth
-                                horizontalAlignment: Text.AlignRight
-                            }
-                            DenseComboBox {
-                                id: flowControl
-                                Layout.fillWidth: true
-                                Layout.preferredWidth: 120
-                                model: ["None", "RTS/CTS", "XON/XOFF"]
-                                onActivated: root.persistSettings()
-                            }
+                        DenseLabel {
+                            text: "Parity"
                         }
-                    }
+                        DenseComboBox {
+                            id: parity
+                            Layout.fillWidth: true
+                            model: ["None", "Even", "Odd"]
+                            onActivated: root.persistSettings()
+                        }
 
-                    HelpText {
-                        Layout.fillWidth: true
-                        text: root.statusText(transportViewModel ? transportViewModel.uartStatus : "", "UART idle")
+                        DenseLabel {
+                            text: "Flow"
+                        }
+                        DenseComboBox {
+                            id: flowControl
+                            Layout.fillWidth: true
+                            model: ["None", "RTS/CTS", "XON/XOFF"]
+                            onActivated: root.persistSettings()
+                        }
                     }
 
                     Item { Layout.fillHeight: true }
@@ -728,13 +703,13 @@ GlassPanel {
                         spacing: 8
                         Item { Layout.fillWidth: true }
                         NeonButton {
-                            text: "Connect"
+                            text: "Open"
                             accent: theme.ok
                             enabled: !root.isTransportOpenOrLocked("UART")
                             onClicked: root.openUartAction()
                         }
                         NeonButton {
-                            text: "Disconnect"
+                            text: "Close"
                             accent: theme.bad
                             enabled: root.isTransportOpenOrLocked("UART")
                             onClicked: root.closeUartAction()
@@ -751,17 +726,16 @@ GlassPanel {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    spacing: theme.sectionSpacing
+                    spacing: 6
 
-                    SectionTitle { text: "TCP Client" }
-
-                    GridLayout {
+                    RowLayout {
                         Layout.fillWidth: true
-                        columns: 2
-                        columnSpacing: 8
-                        rowSpacing: 8
+                        spacing: 6
 
-                        DenseLabel { text: "Host" }
+                        DenseLabel {
+                            text: "Host"
+                            Layout.preferredWidth: 32
+                        }
                         DenseTextField {
                             id: tcpHost
                             Layout.fillWidth: true
@@ -769,7 +743,16 @@ GlassPanel {
                             placeholderText: "Host or IP"
                             onTextEdited: root.persistSettings()
                         }
-                        DenseLabel { text: "Port" }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        DenseLabel {
+                            text: "Port"
+                            Layout.preferredWidth: 32
+                        }
                         DenseTextField {
                             id: tcpPort
                             Layout.fillWidth: true
@@ -779,11 +762,6 @@ GlassPanel {
                         }
                     }
 
-                    HelpText {
-                        Layout.fillWidth: true
-                        text: root.statusText(transportViewModel ? transportViewModel.tcpStatus : "", "TCP disconnected")
-                    }
-
                     Item { Layout.fillHeight: true }
 
                     RowLayout {
@@ -791,13 +769,13 @@ GlassPanel {
                         spacing: 8
                         Item { Layout.fillWidth: true }
                         NeonButton {
-                            text: "Connect"
+                            text: "Open"
                             accent: theme.ok
                             enabled: !root.isTransportOpenOrLocked("TCP")
                             onClicked: root.openTcpAction()
                         }
                         NeonButton {
-                            text: "Disconnect"
+                            text: "Close"
                             accent: theme.bad
                             enabled: root.isTransportOpenOrLocked("TCP")
                             onClicked: root.closeTcpAction()
@@ -814,17 +792,16 @@ GlassPanel {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    spacing: theme.sectionSpacing
+                    spacing: 6
 
-                    SectionTitle { text: "UDP Server" }
-
-                    GridLayout {
+                    RowLayout {
                         Layout.fillWidth: true
-                        columns: 2
-                        columnSpacing: 8
-                        rowSpacing: 8
+                        spacing: 6
 
-                        DenseLabel { text: "Bind Address" }
+                        DenseLabel {
+                            text: "Address"
+                            Layout.preferredWidth: 46
+                        }
                         DenseTextField {
                             id: udpAddr
                             Layout.fillWidth: true
@@ -832,7 +809,16 @@ GlassPanel {
                             placeholderText: "0.0.0.0"
                             onTextEdited: root.persistSettings()
                         }
-                        DenseLabel { text: "Port" }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        DenseLabel {
+                            text: "Port"
+                            Layout.preferredWidth: 46
+                        }
                         DenseTextField {
                             id: udpPort
                             Layout.fillWidth: true
@@ -842,11 +828,6 @@ GlassPanel {
                         }
                     }
 
-                    HelpText {
-                        Layout.fillWidth: true
-                        text: root.statusText(transportViewModel ? transportViewModel.udpStatus : "", "UDP stopped")
-                    }
-
                     Item { Layout.fillHeight: true }
 
                     RowLayout {
@@ -854,13 +835,13 @@ GlassPanel {
                         spacing: 8
                         Item { Layout.fillWidth: true }
                         NeonButton {
-                            text: "Start"
+                            text: "Open"
                             accent: theme.ok
                             enabled: !root.isTransportOpenOrLocked("UDP")
                             onClicked: root.openUdpAction()
                         }
                         NeonButton {
-                            text: "Stop"
+                            text: "Close"
                             accent: theme.bad
                             enabled: root.isTransportOpenOrLocked("UDP")
                             onClicked: root.closeUdpAction()

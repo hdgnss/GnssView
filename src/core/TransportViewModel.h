@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QVariantMap>
 #include <QVariantList>
+#include <QTimer>
 #include <memory>
 
 #include "src/core/TransportPluginLoader.h"
@@ -129,6 +130,7 @@ private:
     TransportPluginLoader m_transportPluginLoader;
     QStringList m_transportPluginLoadErrors;
     QStringList m_transportPluginSearchPaths;
+    QTimer m_uartRefreshTimer;
 };
 
 }  // namespace hdgnss

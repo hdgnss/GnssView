@@ -371,7 +371,7 @@ GlassPanel {
                         NeonButton {
                             required property var modelData
                             width: Math.max(1, Math.floor((commandGrid.width - Math.max(0, commandGrid.columns - 1) * commandGrid.spacing) / Math.max(1, commandGrid.columns)))
-                            height: 42
+                            height: theme.controlHeight
                             text: modelData.name || "Command"
                             accent: theme.accent
                             font.pixelSize: theme.bodySize

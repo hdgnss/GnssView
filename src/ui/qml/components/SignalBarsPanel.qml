@@ -171,8 +171,8 @@ GlassPanel {
             readonly property var groupedItems: root.groupedBandItems(bandItems)
             readonly property int satelliteCount: bandItems.length
             readonly property real slotSpacing: 1
-            readonly property real plotTopPadding: 28
-            readonly property real plotBottomPadding: 32
+            readonly property real plotTopPadding: 18
+            readonly property real plotBottomPadding: 26
             readonly property real displayStrengthMax: 50
             readonly property int gridLineCount: 5
             readonly property real plotHeight: Math.max(0, instrumentChart.height - plotTopPadding - plotBottomPadding)
@@ -232,28 +232,8 @@ GlassPanel {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 6
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Label {
-                        text: instrumentPanel.currentBandLabel + " front-end"
-                        color: theme.textPrimary
-                        font.family: theme.titleFont
-                        font.pixelSize: theme.bodySize + 1
-                        font.bold: true
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    Label {
-                        text: instrumentPanel.bandItems.length + " channels"
-                        color: theme.textSecondary
-                        font.pixelSize: theme.labelSize
-                    }
-                }
+                anchors.margins: 6
+                spacing: 4
 
                 Rectangle {
                     Layout.fillWidth: true
@@ -265,10 +245,32 @@ GlassPanel {
                     clip: true
                     antialiasing: true
 
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 6
+                        z: 10
+                        implicitHeight: 18
+                        implicitWidth: channelsNoteLabel.implicitWidth + 12
+                        radius: 4
+                        color: Qt.rgba(theme.surface2.r, theme.surface2.g, theme.surface2.b, 0.75)
+                        border.width: 1
+                        border.color: Qt.rgba(theme.panelBorder.r, theme.panelBorder.g, theme.panelBorder.b, 0.6)
+
+                        Text {
+                            id: channelsNoteLabel
+                            anchors.centerIn: parent
+                            text: instrumentPanel.bandItems.length + " channels"
+                            color: theme.textSecondary
+                            font.family: theme.bodyFont
+                            font.pixelSize: theme.labelSize - 1
+                        }
+                    }
+
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 8
-                        spacing: 8
+                        anchors.margins: 6
+                        spacing: 6
 
                         Item {
                             Layout.preferredWidth: 34
@@ -329,7 +331,8 @@ GlassPanel {
                                         ctx.fillStyle = theme.chartPeakText
                                         ctx.font = theme.labelSize + "px " + theme.bodyFont
                                         ctx.textAlign = "right"
-                                        ctx.fillText("PEAK " + Math.round(peakDisplayStrength), width - 8, Math.max(plotTop - 6, peakY - 4))
+                                        var peakX = (peakY < 24) ? width - 85 : width - 8
+                                        ctx.fillText("PEAK " + Math.round(peakDisplayStrength), peakX, Math.max(plotTop - 6, peakY - 4))
                                         ctx.textAlign = "left"
                                     }
                                 }
