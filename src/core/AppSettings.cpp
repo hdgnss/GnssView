@@ -316,37 +316,46 @@ void AppSettings::setPluginPrivateSettings(const QString &pluginId, const QVaria
     emit pluginSettingsChanged(cleaned);
 }
 
-void AppSettings::setPluginSettingValue(const QString &pluginId, const QString &key, const QVariant &value) {
+void AppSettings::setPluginSettingValues(const QString &pluginId, const QVariantMap &values) {
     const QString cleanedPluginId = pluginId.trimmed();
-    const QString cleanedKey = key.trimmed();
-    if (cleanedPluginId.isEmpty() || cleanedKey.isEmpty()) {
+    if (cleanedPluginId.isEmpty() || values.isEmpty()) {
         return;
     }
 
-    QVariantMap values = m_pluginPrivateSettings.value(cleanedPluginId);
-    QVariant normalizedValue = value;
-    if (normalizedValue.metaType().id() == QMetaType::QString) {
-        const QString text = normalizedValue.toString().trimmed();
-        if (text.isEmpty()) {
-            normalizedValue = QVariant();
+    QVariantMap merged = m_pluginPrivateSettings.value(cleanedPluginId);
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        const QString key = it.key().trimmed();
+        if (key.isEmpty()) {
+            continue;
+        }
+        QVariant normalizedValue = it.value();
+        if (normalizedValue.metaType().id() == QMetaType::QString) {
+            const QString text = normalizedValue.toString().trimmed();
+            normalizedValue = text.isEmpty() ? QVariant() : QVariant(text);
+        }
+        if (!normalizedValue.isValid() || normalizedValue.isNull()) {
+            merged.remove(key);
         } else {
-            normalizedValue = text;
+            merged.insert(key, normalizedValue);
         }
     }
 
-    if (!normalizedValue.isValid() || normalizedValue.isNull()) {
-        if (!values.contains(cleanedKey)) {
-            return;
-        }
-        values.remove(cleanedKey);
-    } else {
-        if (values.value(cleanedKey) == normalizedValue) {
-            return;
-        }
-        values.insert(cleanedKey, normalizedValue);
+    // setPluginPrivateSettings() ignores a map that equals the stored one, so an
+    // unchanged batch costs nothing. A changed batch costs exactly one
+    // pluginSettingsChanged(), i.e. one plugin applySettings() and one settings UI
+    // refresh, even when a single user gesture wrote several keys.
+    setPluginPrivateSettings(cleanedPluginId, merged);
+}
+
+void AppSettings::setPluginSettingValue(const QString &pluginId, const QString &key, const QVariant &value) {
+    const QString cleanedKey = key.trimmed();
+    if (cleanedKey.isEmpty()) {
+        return;
     }
 
-    setPluginPrivateSettings(cleanedPluginId, values);
+    QVariantMap values;
+    values.insert(cleanedKey, value);
+    setPluginSettingValues(pluginId, values);
 }
 
 void AppSettings::load() {

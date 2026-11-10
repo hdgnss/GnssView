@@ -1386,6 +1386,67 @@ bool expectUnrelatedPluginSettingChangePreservesNmeaAndTecState() {
                   "unrelated plugin setting change must not wipe active TEC dataset");
 }
 
+bool expectPluginSettingBatchWritesEmitOneChangeSignal() {
+    const QString pluginId = QStringLiteral("com.hdgnss.transport.regression-batch");
+
+    AppSettings settings;
+    QVariantMap initial;
+    initial.insert(QStringLiteral("port"), QStringLiteral("COM9"));
+    initial.insert(QStringLiteral("keep"), QStringLiteral("1"));
+    settings.setPluginPrivateSettings(pluginId, initial);
+
+    int settingsChangedSignals = 0;
+    QObject::connect(&settings, &AppSettings::pluginSettingsChanged,
+                     [&settingsChangedSignals, &pluginId](const QString &changedPluginId) {
+                         if (changedPluginId == pluginId) {
+                             ++settingsChangedSignals;
+                         }
+                     });
+
+    // One gesture in a transport plugin's own settings UI can write several keys at
+    // once; that must cost one change signal, not one per key.
+    QVariantMap batch;
+    batch.insert(QStringLiteral("port"), QStringLiteral("COM3"));
+    batch.insert(QStringLiteral("baud"), 460800);
+    batch.insert(QStringLiteral("mode"), QStringLiteral("rtk"));
+    settings.setPluginSettingValues(pluginId, batch);
+    if (!expect(settingsChangedSignals == 1,
+                "a multi-key plugin setting batch should emit pluginSettingsChanged once")) {
+        return false;
+    }
+
+    const QVariantMap stored = settings.pluginPrivateSettings(pluginId);
+    if (!expect(stored.value(QStringLiteral("port")).toString() == QStringLiteral("COM3")
+                  && stored.value(QStringLiteral("baud")).toInt() == 460800
+                  && stored.value(QStringLiteral("mode")).toString() == QStringLiteral("rtk")
+                  && stored.value(QStringLiteral("keep")).toString() == QStringLiteral("1"),
+                "a plugin setting batch should merge into the stored settings and keep untouched keys")) {
+        return false;
+    }
+
+    // Re-applying the same values stays silent: no store, no signal, no plugin
+    // applySettings()/settings UI rebuild round trip.
+    settings.setPluginSettingValues(pluginId, batch);
+    if (!expect(settingsChangedSignals == 1,
+                "an unchanged plugin setting batch should not emit pluginSettingsChanged")) {
+        return false;
+    }
+
+    // Clearing a key goes through the same single-signal path.
+    QVariantMap cleared;
+    cleared.insert(QStringLiteral("mode"), QString());
+    settings.setPluginSettingValues(pluginId, cleared);
+    const QVariantMap afterClear = settings.pluginPrivateSettings(pluginId);
+    const int signalsAfterClear = settingsChangedSignals;
+    settings.setPluginPrivateSettings(pluginId, QVariantMap{});
+
+    return expect(signalsAfterClear == 2 && !afterClear.contains(QStringLiteral("mode"))
+                  && afterClear.value(QStringLiteral("baud")).toInt() == 460800,
+                  "clearing a plugin setting key should emit pluginSettingsChanged once and drop the key")
+        && expect(settings.pluginPrivateSettings(pluginId).isEmpty(),
+                  "the regression batch settings should not leak into stored settings");
+}
+
 bool expectSkyAndSignalModelPreaggregatedStatsAndSignalFiltering() {
     auto makeSat = [](const QString &constellation,
                       const QString &band,
@@ -1749,6 +1810,9 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     if (!expectUnrelatedPluginSettingChangePreservesNmeaAndTecState()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectPluginSettingBatchWritesEmitOneChangeSignal()) {
         return EXIT_FAILURE;
     }
     if (!expectSkyAndSignalModelPreaggregatedStatsAndSignalFiltering()) {

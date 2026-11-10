@@ -28,6 +28,11 @@ GlassPanel {
         }
     }
 
+    // Coalesced plugin setting writes; see queuePluginSetting().
+    property string pendingPluginId: ""
+    property string pendingPluginTransport: ""
+    property var pendingPluginSettings: null
+
     Settings {
         id: transportSettings
         category: "TransportConfigPanel"
@@ -227,7 +232,10 @@ GlassPanel {
         return transportViewModel ? transportViewModel.transportOpen(name) : false
     }
 
-    function pluginTransports() {
+    // The tab bar and the page StackLayout are index-aligned, so both Repeaters
+    // have to model one and the same list. Building it twice per change also lets
+    // the two copies drift apart.
+    readonly property var pluginTransportList: {
         var plugins = []
         var seen = ({})
         if (!transportList) {
@@ -388,6 +396,42 @@ GlassPanel {
         })
     }
 
+    // A plugin's own settings UI can change several keys in one gesture (a mode
+    // preset writes baud + port + mode together). Every write used to run a full
+    // apply cycle of its own: applySettings() inside the plugin, a descriptor
+    // rebuild, and a refresh of the settings UI. Collect the writes that belong to
+    // one gesture and apply them as a single batch instead.
+    function queuePluginSetting(pluginId, transportName, key, value) {
+        if (!appSettings || !pluginId || !key) {
+            return
+        }
+        if (root.pendingPluginId !== pluginId) {
+            root.flushPluginSettings()
+            root.pendingPluginId = pluginId
+            root.pendingPluginTransport = transportName
+            root.pendingPluginSettings = ({})
+        }
+        root.pendingPluginSettings[String(key)] = value
+        if (!pluginSettingBatch.running) {
+            pluginSettingBatch.start()
+        }
+    }
+
+    function flushPluginSettings() {
+        var pluginId = root.pendingPluginId
+        var transportName = root.pendingPluginTransport
+        var values = root.pendingPluginSettings
+        root.pendingPluginId = ""
+        root.pendingPluginTransport = ""
+        root.pendingPluginSettings = null
+        if (pluginId.length === 0 || !values || !appSettings) {
+            return
+        }
+        root.preserveTransportSelection(transportName, function() {
+            appSettings.setPluginSettingValues(pluginId, values)
+        })
+    }
+
     function restoreSettings() {
         applyComboValue(uartPort, transportSettings.uartPort)
         applyComboValue(uartBaud, transportSettings.uartBaud)
@@ -515,6 +559,13 @@ GlassPanel {
         return descriptor.supportsDiscovery ? "Plugin ready for probe or open" : "Plugin ready"
     }
 
+    Timer {
+        id: pluginSettingBatch
+        interval: 0
+        repeat: false
+        onTriggered: root.flushPluginSettings()
+    }
+
     Connections {
         target: transportViewModel
         function onSerialPortsChanged() {
@@ -587,7 +638,7 @@ GlassPanel {
             }
 
             Repeater {
-                model: root.pluginTransports()
+                model: root.pluginTransportList
                 delegate: NeonTabButton {
                     required property var modelData
                     text: modelData.displayName || modelData.transportName
@@ -852,7 +903,7 @@ GlassPanel {
             }
 
             Repeater {
-                model: root.pluginTransports()
+                model: root.pluginTransportList
 
                 delegate: Item {
                     required property var modelData
@@ -1088,9 +1139,7 @@ GlassPanel {
                 if (item.settingChanged) {
                     item.settingChanged.connect(function(key, value) {
                         if (appSettings && descriptor && descriptor.pluginId) {
-                            root.preserveTransportSelection(descriptor.transportName, function() {
-                                appSettings.setPluginSettingValue(descriptor.pluginId, key, value)
-                            })
+                            root.queuePluginSetting(descriptor.pluginId, descriptor.transportName, key, value)
                         }
                     })
                 }

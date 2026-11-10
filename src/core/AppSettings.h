@@ -67,6 +67,7 @@ public slots:
                                                const QString &pluginId,
                                                bool enabled);
     void setPluginPrivateSettings(const QString &pluginId, const QVariantMap &settings);
+    void setPluginSettingValues(const QString &pluginId, const QVariantMap &values);
     void setPluginSettingValue(const QString &pluginId, const QString &key, const QVariant &value);
 
 signals:

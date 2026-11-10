@@ -43,5 +43,6 @@ Main data path:
 - UI code consumes models and controller APIs instead of parsing protocol bytes directly.
 - Command templates are provided through `CommandTemplate` and merged into the command button model.
 - Plugin binaries are built separately and loaded at runtime from configured directories.
+- Plugin settings are written in batches: one gesture in a plugin's own settings UI may set several keys, and a batch emits a single settings change so the plugin's `applySettings()` and its settings UI run once per gesture, not once per key.
 - Logs are disabled until the user sets a log root directory in Settings.
 - Release packages do not include external plugin binaries by default.
