@@ -239,6 +239,20 @@ directories separated by `:` on macOS/Linux and `;` on Windows.
 - `transportInstance()` returns an `hdgnss::ITransport` instance.
 - Implement `IConfigurablePlugin` when settings must be persisted.
 - Implement `IPluginSettingsUi` only when the generated settings fields are not enough.
+- Optional automatic discovery uses a `Q_INVOKABLE void requestDiscovery()` method
+  on the plugin QObject. The host requests discovery on its refresh timer only
+  for the active plugin while all transports are closed. The method must return
+  promptly and coalesce requests while a scan is in progress. Plugins without
+  this method keep their existing behavior.
+- Emit `discoveryChanged(QString)` with the value of `transportId()` to refresh
+  the transport descriptor after discovery. Connections are removed on reload.
+- A custom settings UI descriptor can set `compactTransportPanel: true` to hide
+  the host title/probe row. This flag requires a `qmlSource`.
+- Transport plugins own the drawing and updating of their status UI. GnssView
+  does not render a status row in plugin transport pages.
+- A custom QML root may expose `property bool canOpen` to control the host Open
+  button and `property bool transportLocked` to receive the current open/lock
+  state. These properties work with either compact or standard layout.
 
 ## Automation Plugin Notes
 

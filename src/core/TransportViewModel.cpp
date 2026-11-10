@@ -39,6 +39,14 @@ TransportViewModel::TransportViewModel(QObject *parent)
         if (!transportOpen(QStringLiteral("UART"))) {
             refreshSerialPorts();
         }
+        if (m_lockedTransport.isEmpty()) {
+            if (PluginTransportEntry *entry = findPluginEntry(m_activeTransport)) {
+                if (entry->pluginObject && entry->transport && !entry->transport->isOpen() &&
+                    entry->pluginObject->metaObject()->indexOfMethod("requestDiscovery()") >= 0) {
+                    QMetaObject::invokeMethod(entry->pluginObject, "requestDiscovery", Qt::AutoConnection);
+                }
+            }
+        }
     });
     m_uartRefreshTimer.start(500);
 }
@@ -261,6 +269,12 @@ void TransportViewModel::reloadTransportPlugins() {
     for (const PluginTransportEntry &entry : m_pluginTransports) {
         if (entry.transport) {
             entry.transport->close();
+            QObject::disconnect(entry.transport, nullptr, this, nullptr);
+        }
+        // A plugin instance can survive loader destruction when Qt keeps the
+        // library loaded. Do not keep callbacks for disabled or reloaded plugins.
+        if (entry.pluginObject) {
+            QObject::disconnect(entry.pluginObject, nullptr, this, nullptr);
         }
     }
 
@@ -325,6 +339,10 @@ void TransportViewModel::reloadTransportPlugins() {
             entry.pluginObject = pluginObject;
             entry.transport = transport;
             m_pluginTransports.append(entry);
+            if (pluginObject->metaObject()->indexOfSignal("discoveryChanged(QString)") >= 0) {
+                connect(pluginObject, SIGNAL(discoveryChanged(QString)),
+                        this, SIGNAL(transportDescriptorChanged(QString)));
+            }
             loadedTransportIds.insert(entry.transportId);
             hookTransport(transport);
             emit transportRegistered(transport);

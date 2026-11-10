@@ -242,6 +242,49 @@ target_compile_definitions(GnssViewRegression PRIVATE
     HDGNSS_REGRESSION_TESTS=1
 )
 
+# Exercise optional plugin discovery and lifecycle with an isolated fake plugin.
+include(CTest)
+if(BUILD_TESTING)
+    add_library(GnssViewDiscoveryFixture MODULE
+        tests/DiscoveryFixture.cpp
+        src/transports/ITransport.cpp
+        include/hdgnss/ITransport.h
+    )
+    target_include_directories(GnssViewDiscoveryFixture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(GnssViewDiscoveryFixture PRIVATE Qt6::Core)
+    set_target_properties(GnssViewDiscoveryFixture PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/discovery-test-plugins"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/discovery-test-plugins"
+    )
+
+    add_executable(GnssViewTransportDiscoveryRegression
+        tests/TransportDiscoveryRegression.cpp
+        src/core/TransportViewModel.cpp
+        src/core/TransportPluginLoader.cpp
+        src/core/AppSettings.cpp
+        src/transports/ITransport.cpp
+        src/transports/SerialTransport.cpp
+        src/transports/TcpClientTransport.cpp
+        src/transports/UdpServerTransport.cpp
+        include/hdgnss/ITransport.h
+    )
+    target_include_directories(GnssViewTransportDiscoveryRegression PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(GnssViewTransportDiscoveryRegression PRIVATE Qt6::Core Qt6::Network Qt6::SerialPort)
+    add_dependencies(GnssViewTransportDiscoveryRegression GnssViewDiscoveryFixture)
+    add_test(NAME transport_discovery_regression
+        COMMAND GnssViewTransportDiscoveryRegression $<TARGET_FILE:GnssViewDiscoveryFixture>)
+
+    find_program(HDGNSS_QMLTESTRUNNER_EXECUTABLE
+        NAMES qmltestrunner qmltestrunner.exe
+        HINTS "${Qt6_DIR}/../../../bin"
+    )
+    if(HDGNSS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME transport_panel_regression
+            COMMAND "${HDGNSS_QMLTESTRUNNER_EXECUTABLE}" -platform offscreen
+                -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/qml")
+    endif()
+endif()
+
 set_target_properties(GnssView PROPERTIES
     QT_QML_MODULE_NO_IMPORT_SCAN TRUE
 )

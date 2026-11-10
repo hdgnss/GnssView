@@ -12,7 +12,6 @@ GlassPanel {
 
     property bool settingsReady: false
     property bool syncingTabs: false
-    property int statusTick: 0
     property var transportList: transportViewModel ? transportViewModel.availableTransports : []
     property string lockedTransport: transportViewModel ? transportViewModel.lockedTransport : ""
 
@@ -197,10 +196,6 @@ GlassPanel {
             return fn.apply(transportViewModel, args || [])
         }
         return undefined
-    }
-
-    function statusText(value, fallbackText) {
-        return value && value.length > 0 ? value : fallbackText
     }
 
     function transportDescriptorByName(name) {
@@ -519,6 +514,7 @@ GlassPanel {
         if (!transportViewModel) {
             return
         }
+        flushPluginSettings()
         var settingsMap = transportViewModel.transportStoredSettings(name)
         if (transportViewModel.openTransport(name, settingsMap || {})) {
             rememberOpenTransport(name)
@@ -552,13 +548,6 @@ GlassPanel {
         }
     }
 
-    function pluginStatusFallback(descriptor) {
-        if (!descriptor) {
-            return "Transport idle"
-        }
-        return descriptor.supportsDiscovery ? "Plugin ready for probe or open" : "Plugin ready"
-    }
-
     Timer {
         id: pluginSettingBatch
         interval: 0
@@ -581,9 +570,6 @@ GlassPanel {
                 tabs.currentIndex = index
                 root.syncingTabs = false
             }
-        }
-        function onStatusesChanged() {
-            root.statusTick += 1
         }
         function onLockedTransportChanged() {
             root.ensureCurrentTransport()
@@ -932,6 +918,7 @@ GlassPanel {
 
                         RowLayout {
                             Layout.fillWidth: true
+                            visible: !(root.hasCustomPluginUi(descriptorData) && descriptorData.customUi.compactTransportPanel)
                             spacing: 8
 
                             SectionTitle {
@@ -948,6 +935,7 @@ GlassPanel {
                         }
 
                         CustomPluginUi {
+                            id: pluginCustomUi
                             Layout.fillWidth: true
                             visible: root.hasCustomPluginUi(descriptorData)
                             descriptor: descriptorData
@@ -993,13 +981,6 @@ GlassPanel {
                             }
                         }
 
-                        HelpText {
-                            Layout.fillWidth: true
-                            text: root.statusTick >= 0 ? root.statusText(
-                                transportViewModel ? transportViewModel.transportStatus(descriptorData.transportName) : "",
-                                root.pluginStatusFallback(descriptorData)) : ""
-                        }
-
                         Item { Layout.fillHeight: true }
 
                         RowLayout {
@@ -1010,6 +991,9 @@ GlassPanel {
                                 text: "Open"
                                 accent: theme.ok
                                 enabled: !root.isTransportOpenOrLocked(descriptorData.transportName)
+                                    && (!root.hasCustomPluginUi(descriptorData)
+                                        || (pluginCustomUi.contentItem && (!("canOpen" in pluginCustomUi.contentItem)
+                                            || pluginCustomUi.contentItem.canOpen)))
                                 onClicked: root.preserveTransportSelection(descriptorData.transportName, function() {
                                     root.openPluginTransport(descriptorData.transportName)
                                 })
@@ -1047,6 +1031,9 @@ GlassPanel {
             labelSize: theme.labelSize,
             controlHeight: theme.controlHeight,
             controlRadius: theme.controlRadius,
+            panelRadius: theme.panelRadius,
+            tooltipBg: theme.tooltipBg,
+            panelBorderStrong: theme.panelBorderStrong,
             textPrimary: theme.textPrimary,
             textSecondary: theme.textSecondary,
             inputBg: theme.inputBg,
@@ -1082,6 +1069,7 @@ GlassPanel {
         property var settingsMap: ({})
         property var style: ({})
         property var contentItem: null
+        readonly property bool transportLocked: !!(descriptor && root.isTransportOpenOrLocked(descriptor.transportName))
         property string loadError: ""
         property string loadedSource: ""
 
@@ -1124,6 +1112,9 @@ GlassPanel {
                 loadedSource = source
                 contentItem = item
                 item.width = Qt.binding(function() { return customHost.width })
+                if ("transportLocked" in item) {
+                    item.transportLocked = Qt.binding(function() { return customHost.transportLocked })
+                }
                 if ("pluginId" in item) {
                     item.pluginId = descriptor.pluginId || ""
                 }
