@@ -11,7 +11,7 @@ RequestExecutionLevel admin
 !endif
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.1.4"
+  !define APP_VERSION "0.1.5"
 !endif
 
 !ifndef COMPANY_NAME
