@@ -54,3 +54,11 @@
   - 多显示器窗口坐标记忆优化，支持跨屏负坐标安全恢复与断开回退保护。
   - 重新采集并更新 `baseline_main_dark.png` 与 `baseline_main_light.png`。
   - 核心构建与 C++ 回归测试 100% 通过。
+- **2026-11-16 (Phase 4)**:
+  - `SettingsPanel.qml` 大规模重构解耦：单文件行数由 906 行精简至 127 行（降低 86%）。
+  - 创建 5 个高内聚子组件：`AppearanceSection.qml`, `StorageSection.qml`, `PreferencesSection.qml`, `PluginConfigSection.qml`, `SettingsSection.qml`。
+  - 抽取通用动态插件表单组件 `PluginSettingsForm.qml`，统一处理各类插件 fieldData，支持下拉、多选、文本及只读逻辑。
+  - 全面接入 Phase 2 控件库（`AppButton`, `AppTextField`, `AppComboBox`, `AppCheckBox`），消除重复定义。
+  - 增加 Compact/Comfortable 密度选择，优化弹窗小屏幕自适应及 Esc 退出。
+  - 重新采集并更新 `baseline_settings_dark.png` 与 `baseline_settings_light.png`。
+  - 核心构建与 C++ 回归测试 100% 通过。

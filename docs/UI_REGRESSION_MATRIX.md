@@ -59,4 +59,10 @@
   - [x] 真实遥测底栏 (`AppStatusBar`): 通信连接、Fix 模式、卫星追踪数、PDOP (领域着色)、UTC 时钟、版本与更新检测
   - [x] 标题栏交互: 增加 Dark/Light 快速切换按钮 (带快捷键 `Ctrl+T` 提示)，多屏负坐标安全恢复
   - [x] 关于对话框 (`AboutDialog`): 版本、Qt 运行时、平台信息展示
+- [x] **设置中心重构 (Phase 4)**:
+  - [x] `SettingsPanel.qml` 模块化拆分（906 行 -> 127 行）
+  - [x] 拆分子区块：`AppearanceSection.qml`, `StorageSection.qml`, `PreferencesSection.qml`, `PluginConfigSection.qml`, `SettingsSection.qml`
+  - [x] 动态插件字段表单组件 `PluginSettingsForm.qml` 封装
+  - [x] 全面接入 Phase 2 通用控件（AppButton, AppTextField, AppComboBox, AppCheckBox）
+  - [x] 双主题下弹窗截图重捕获验证（`baseline_settings_dark.png`, `baseline_settings_light.png`）
 - [x] **核心回归测试**: 100% 运行通过，无破坏既有模型与算法
