@@ -543,26 +543,32 @@ Rectangle {
                                 }
                             }
 
-                            // Checkboxes
+                            // Checkboxes & Switches
                             ColumnLayout {
                                 spacing: 4
-                                Label { text: "Switches & CheckBoxes"; color: theme.textSecondary; font.pixelSize: 10 }
+                                Label { text: "AppCheckBox & AppSwitch (Precision Vector)"; color: theme.textSecondary; font.pixelSize: 10 }
                                 RowLayout {
-                                    spacing: 10
-                                    CheckBox {
+                                    spacing: 12
+                                    AppCheckBox {
                                         id: cb1
                                         text: "Auto-Reconnect"
                                         checked: true
-                                        contentItem: Text { leftPadding: 4; text: cb1.text; color: theme.textPrimary; font.pixelSize: 10 }
                                     }
-                                    CheckBox {
+                                    AppCheckBox {
                                         id: cb2
-                                        text: "Log Raw Stream"
+                                        text: "Log Raw"
                                         checked: false
-                                        contentItem: Text { leftPadding: 4; text: cb2.text; color: theme.textPrimary; font.pixelSize: 10 }
                                     }
-                                    Switch {
+                                    AppCheckBox {
+                                        id: cb3
+                                        text: "Disabled"
                                         checked: true
+                                        enabled: false
+                                    }
+                                    AppSwitch {
+                                        id: sw1
+                                        checked: true
+                                        text: "Active"
                                     }
                                 }
                             }

@@ -114,43 +114,8 @@ Popup {
         font.bold: true
     }
 
-    component SettingsCheckBox: CheckBox {
-        id: control
-        spacing: 10
-        font.family: theme.bodyFont
-        font.pixelSize: theme.bodySize
-        leftPadding: indicator.width + spacing
-        implicitHeight: theme.controlHeight
-
-        indicator: Rectangle {
-            implicitWidth: 22
-            implicitHeight: 22
-            x: 0
-            y: parent.topPadding + (parent.availableHeight - height) * 0.5
-            radius: 6
-            color: control.checked
-                ? Qt.rgba(theme.accentStrong.r, theme.accentStrong.g, theme.accentStrong.b, 0.18)
-                : Qt.rgba(theme.surface2.r, theme.surface2.g, theme.surface2.b, 0.94)
-            border.width: 1
-            border.color: control.checked ? theme.accentStrong : theme.panelBorderStrong
-
-            Text {
-                anchors.centerIn: parent
-                text: control.checked ? "✓" : ""
-                color: theme.textPrimary
-                font.family: theme.titleFont
-                font.pixelSize: 15
-                font.bold: true
-            }
-        }
-
-        contentItem: Text {
-            text: control.text
-            font: control.font
-            color: control.enabled ? theme.textPrimary : theme.textSecondary
-            verticalAlignment: Text.AlignVCenter
-            wrapMode: Text.WordWrap
-        }
+    component SettingsCheckBox: AppCheckBox {
+        wrapText: true
     }
 
     component SettingsSection: Rectangle {
@@ -405,43 +370,8 @@ Popup {
         }
     }
 
-    component PluginFieldCheckBox: CheckBox {
-        id: control
-        spacing: 10
-        font.family: theme.bodyFont
-        font.pixelSize: theme.bodySize
-        leftPadding: indicator.width + spacing
-        implicitHeight: theme.controlHeight
-
-        indicator: Rectangle {
-            implicitWidth: 22
-            implicitHeight: 22
-            x: 0
-            y: parent.topPadding + (parent.availableHeight - height) * 0.5
-            radius: 6
-            color: control.checked
-                ? Qt.rgba(theme.accentStrong.r, theme.accentStrong.g, theme.accentStrong.b, 0.18)
-                : Qt.rgba(theme.surface2.r, theme.surface2.g, theme.surface2.b, 0.94)
-            border.width: 1
-            border.color: control.checked ? theme.accentStrong : theme.panelBorderStrong
-
-            Text {
-                anchors.centerIn: parent
-                text: control.checked ? "✓" : ""
-                color: theme.textPrimary
-                font.family: theme.titleFont
-                font.pixelSize: 15
-                font.bold: true
-            }
-        }
-
-        contentItem: Text {
-            text: control.text
-            font: control.font
-            color: control.enabled ? theme.textPrimary : theme.textSecondary
-            verticalAlignment: Text.AlignVCenter
-            wrapMode: Text.WordWrap
-        }
+    component PluginFieldCheckBox: AppCheckBox {
+        wrapText: true
     }
 
     Component {
