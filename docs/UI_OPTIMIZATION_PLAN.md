@@ -1,7 +1,7 @@
 # GnssView UI 优化分阶段执行计划 (Optimization Plan)
 
 **分支**: `feature/ui-modernization` (基于 `origin/master` @ `0a04617`)  
-**状态**: Phase 0 进行中 (Gate 0 待验收)  
+**状态**: Phase 1 完成 (Gate 1 通过)，准备进入 Phase 2  
 **上次更新**: 2026-11-16  
 
 ---
@@ -11,8 +11,8 @@
 | 阶段 | 描述 | 状态 | 目标交付物 |
 |---|---|---|---|
 | **Phase 0** | 全量审计与基线建立 (只读审查与测试基线) | **DONE (Gate 0 通过)** | `UI_AUDIT.md`, 基线截图, 测试日志, 风险表 |
-| **Phase 1** | Design System 规范落地与 Theme 演进 | **TODO** | `UI_DESIGN_SYSTEM.md` 细化, `Theme.qml` 兼容重构, Control Gallery |
-| **Phase 2** | 通用控件库实现与 NeonButton 收敛 | **TODO** | `AppButton`, `AppTextField`, `AppComboBox`, `AppCheckBox` 等 |
+| **Phase 1** | Design System 规范落地与 Theme 演进 | **DONE (Gate 1 通过)** | `UI_DESIGN_SYSTEM.md`, `Theme.qml` 增强, `ControlGallery.qml` 及全景截图 |
+| **Phase 2** | 通用控件库实现与 NeonButton 收敛 | **TODO (下一阶段)** | `AppButton`, `AppTextField`, `AppComboBox`, `AppCheckBox` 等 |
 | **Phase 3** | 跨平台主窗口 Shell、菜单栏与统一状态栏 | **TODO** | `Main.qml` Shell 重构, Linux/Win MenuBar, Footer 状态栏 |
 | **Phase 4** | SettingsPanel 模块化拆分与重构 | **TODO** | 设置区块组件化, 动态插件表单独立, 键盘无障碍 |
 | **Phase 5** | 全 Dashboard 面板现代样式迁移 | **TODO** | 8 大面板样式迁移, 领域语义色保护, 高 DPI 布局 |
@@ -37,13 +37,14 @@
 ---
 
 ### Phase 1 — Design System 规范与设计样机
-- [ ] 完善 `docs/UI_DESIGN_SYSTEM.md`，确立 Token、尺寸、状态矩阵
-- [ ] 验证跨平台 QQuickStyle (`Basic` 样式兼容性确定)
-- [ ] 重构/扩展 `src/ui/qml/components/Theme.qml`，保留所有向后兼容属性与函数，增补语义 Token
-- [ ] 建立轻量级组件对照画廊 (`ControlGallery.qml` 或测试沙盒)
-- [ ] 验证 Light/Dark 切换时所有 Token 实时双向同步
+- [x] 完善 `docs/UI_DESIGN_SYSTEM.md`，确立 Token、尺寸、状态矩阵
+- [x] 验证跨平台 QQuickStyle (`Basic` 样式兼容性确定，记录决策依据)
+- [x] 重构/扩展 `src/ui/qml/components/Theme.qml`，保留所有向后兼容属性与函数，增补语义 Token 与密度支持
+- [x] 建立轻量级组件对照画廊 (`src/ui/qml/components/ControlGallery.qml`)
+- [x] 采集画廊截图：暗黑全景 (`gallery_dark.png`)、明亮全景 (`gallery_light.png`)、舒适密度 (`gallery_comfortable.png`)
+- [x] 验证 Light/Dark 切换时所有 Token 实时双向同步，既有核心回归测试 100% 通过
 
-**Gate 1 门槛**: 旧调用方 100% 兼容，无 QML 解析警告增加，规范完备。
+**Gate 1 门槛验收**: **PASS** (旧 Theme 对外 API 100% 兼容，控件测试画廊交互完备，无任何回归问题)
 
 ---
 

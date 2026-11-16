@@ -1,7 +1,17 @@
 import QtQuick
 
 QtObject {
+    id: root
+
+    // Theme mode resolution
     readonly property bool lightMode: typeof appSettings !== "undefined" && appSettings && appSettings.uiTheme === "light"
+
+    // Density resolution: default compact for GNSS telemetry, configurable via appSettings
+    property bool isCompact: typeof appSettings !== "undefined" && appSettings && typeof appSettings.uiDensity !== "undefined"
+                             ? appSettings.uiDensity === "compact"
+                             : true
+
+    // Background & Surfaces
     readonly property color bgStart: token("#06090d", "#eef4fb")
     readonly property color bgMid: token("#03070b", "#e7f0f8")
     readonly property color bgEnd: token("#010307", "#dce8f3")
@@ -9,14 +19,30 @@ QtObject {
     readonly property color panelOverlay: token("#111b24", "#ffffff")
     readonly property color border: token("#334757", "#b6c9d9")
     readonly property color borderStrong: token("#5d7284", "#7898b3")
+    readonly property color borderSubtle: token("#1c2e3c", "#d5e2ed")
+    readonly property color borderHover: token("#48667c", "#8ea7ba")
+    readonly property color borderFocus: accentStrong
+
+    // Accent scale
     readonly property color accent: token("#45a6ff", "#0b76d8")
     readonly property color accentStrong: token("#45a6ff", "#005fb8")
     readonly property color accentSoft: token("#9bd8ff", "#d5ebff")
+    readonly property color focusRing: token(Qt.rgba(0.27, 0.65, 1.0, 0.45), Qt.rgba(0.04, 0.46, 0.85, 0.35))
+    readonly property color focusRingStrong: token("#45a6ff", "#005fb8")
+
+    // Text hierarchy
     readonly property color textPrimary: token("#eaf2ff", "#102236")
     readonly property color textSecondary: token("#9eb2c7", "#4f6578")
+    readonly property color textDisabled: token("#54697a", "#8e9fae")
+    readonly property color textMuted: token("#7e93a7", "#647b8f")
+    readonly property color textPlaceholder: token("#556a7c", "#96a9b8")
+
+    // Feedback & Semantic states
     readonly property color warning: token("#f2b35f", "#b46b00")
     readonly property color ok: token("#42d77d", "#147a48")
     readonly property color bad: token("#ff6578", "#b4233d")
+
+    // GNSS domain semantics
     readonly property color semanticPosition: accentStrong
     readonly property color semanticTime: token("#73cfff", "#087da5")
     readonly property color semanticMotion: warning
@@ -30,20 +56,31 @@ QtObject {
     readonly property color semanticHealthGood: ok
     readonly property color semanticHealthWarn: warning
     readonly property color semanticHealthBad: bad
+
+    // Surface steps
     readonly property color shellBorder: token("#284153", "#9eb7ca")
     readonly property color surface0: token("#080d12", "#f1f7fc")
     readonly property color surface1: token("#0d151b", "#ffffff")
     readonly property color surface2: token("#111b23", "#eaf3fa")
     readonly property color surface3: token("#17252f", "#dcebf6")
     readonly property color surface4: token("#213947", "#c5dced")
+
+    // Panels & Cards
     readonly property color panelHeader: token("#111b24", "#f8fbfe")
     readonly property color panelHeaderBottom: token("#0b1219", "#eaf3fb")
     readonly property color panelBorder: token("#223948", "#c7d7e3")
     readonly property color panelBorderStrong: token("#315064", "#9ab4c7")
     readonly property color innerBorder: lightMode ? Qt.rgba(0.48, 0.62, 0.74, 0.42) : Qt.rgba(0.33, 0.52, 0.65, 0.36)
+    readonly property color cardBg: surface1
+    readonly property color cardHeaderBg: token("#0e1720", "#edf4fa")
+    readonly property color cardBorder: panelBorder
+
+    // Inputs & Forms
     readonly property color inputBg: token("#070c11", "#ffffff")
     readonly property color inputBorder: token("#294354", "#adc2d3")
     readonly property color inputBorderFocus: token("#45a6ff", "#0b76d8")
+
+    // Tab navigation
     readonly property color tabBarBg: token("#070c11", "#e9f2f8")
     readonly property color tabBarBorder: token("#263d4d", "#b7cad8")
     readonly property color tabBarGlow: token("#163240", "#d0e7f9")
@@ -51,13 +88,38 @@ QtObject {
     readonly property color tabButtonHover: token("#12202a", "#dcecf8")
     readonly property color tabButtonActive: token("#153743", "#cfe7f8")
     readonly property color tabSelectedAccent: accentStrong
+
+    // Button component tokens
+    readonly property color buttonSecondaryBg: surface1
+    readonly property color buttonSecondaryHover: surface2
+    readonly property color buttonSecondaryPressed: surface4
+    readonly property color buttonSecondaryBorder: border
+    readonly property color buttonPrimaryBg: accentStrong
+    readonly property color buttonPrimaryHover: token("#5bb2ff", "#0070d8")
+    readonly property color buttonPrimaryText: "#ffffff"
+    readonly property color buttonDangerBg: bad
+    readonly property color buttonDangerText: "#ffffff"
+    readonly property color buttonSuccessBg: ok
+    readonly property color buttonSuccessText: "#ffffff"
+    readonly property color buttonGhostHover: token(Qt.rgba(1, 1, 1, 0.08), Qt.rgba(0, 0, 0, 0.06))
+
+    // Hover, lines & dividers
     readonly property color hoverText: token("#d3f9ff", "#044c8f")
     readonly property color divider: token("#334c5d", "#b6c9d8")
     readonly property color lineSoft: lightMode ? Qt.rgba(0.10, 0.22, 0.34, 0.08) : Qt.rgba(1, 1, 1, 0.08)
     readonly property color lineStrong: lightMode ? Qt.rgba(0.10, 0.22, 0.34, 0.22) : Qt.rgba(1, 1, 1, 0.22)
+
+    // Scrollbar
+    readonly property color scrollbarBg: token(Qt.rgba(0, 0, 0, 0.20), Qt.rgba(0, 0, 0, 0.06))
+    readonly property color scrollbarThumb: token(Qt.rgba(1, 1, 1, 0.22), Qt.rgba(0, 0, 0, 0.24))
+    readonly property color scrollbarThumbHover: token(Qt.rgba(1, 1, 1, 0.38), Qt.rgba(0, 0, 0, 0.40))
+
+    // Tooltip
     readonly property color tooltipBg: token("#081016", "#ffffff")
     readonly property color tooltipText: token("#eef6ff", "#102236")
     readonly property color tooltipDetail: token("#a7bacd", "#536a7f")
+
+    // Charts & Canvases
     readonly property color chartBg: token("#071016", "#f8fbfe")
     readonly property color chartGridMajor: token("#355466", "#abc2d4")
     readonly property color chartGridMinor: token("#1c303d", "#d7e5ef")
@@ -68,6 +130,8 @@ QtObject {
     readonly property color chartPeak: token("#9bf6e0", "#0b76d8")
     readonly property color chartPeakText: token("#dff5ff", "#0f3e68")
     readonly property color visibleHint: lightMode ? Qt.rgba(0.07, 0.18, 0.28, 0.18) : Qt.rgba(1, 1, 1, 0.16)
+
+    // Raw stream log badges & rows
     readonly property color rawRx: token("#43eaa7", "#168a61")
     readonly property color rawTx: token("#ff9b70", "#c45b2d")
     readonly property color rawRxText: token("#78f6bf", "#126f51")
@@ -82,11 +146,15 @@ QtObject {
     readonly property color badgeBinText: token("#d7ddff", "#273b8d")
     readonly property color rawTextNmea: token("#c8f7ff", "#164a60")
     readonly property color rawTextBin: token("#9fd6ff", "#185b91")
+
+    // Shell & Backdrop
     readonly property color shellGlass: lightMode ? Qt.rgba(0.93, 0.97, 1.0, 0.78) : Qt.rgba(0.04, 0.07, 0.09, 0.70)
     readonly property color shellOutline: lightMode ? Qt.rgba(0.45, 0.61, 0.74, 0.34) : Qt.rgba(0.39, 0.62, 0.74, 0.25)
     readonly property color overlayScrim: lightMode ? Qt.rgba(0.64, 0.73, 0.82, 0.44) : Qt.rgba(0.01, 0.03, 0.08, 0.68)
     readonly property color backgroundGrid: token("#203644", "#c6d8e6")
     readonly property color caption: token("#758fa4", "#697f92")
+
+    // Constellations (Used vs Visible)
     readonly property color constellationGpsUsed: token("#72f2ff", "#0089b7")
     readonly property color constellationGpsVisible: token("#466d75", "#94c3d0")
     readonly property color constellationGloUsed: token("#7df59b", "#1f8f48")
@@ -103,27 +171,36 @@ QtObject {
     readonly property color constellationNavicVisible: token("#785b4e", "#d6aa94")
     readonly property color constellationUnknownUsed: token("#9fb8ff", "#5672c0")
     readonly property color constellationUnknownVisible: token("#4f5d7d", "#a6b2d5")
+
+    // Metrics & Dimensions
     readonly property int shellRadius: 6
     readonly property int radius: 8
     readonly property int panelRadius: 8
     readonly property int cardRadius: 6
-    readonly property int panelContentMargin: 8
-    readonly property int controlHeight: 30
     readonly property int controlRadius: 6
     readonly property int pillRadius: 6
     readonly property int badgeRadius: 9
     readonly property int microRadius: 4
     readonly property int tinyRadius: 2
+
+    // Density-responsive control metrics
+    readonly property int controlHeight: isCompact ? 28 : 34
+    readonly property int panelContentMargin: isCompact ? 8 : 12
+    readonly property int compactSpacing: isCompact ? 6 : 8
+    readonly property int sectionSpacing: isCompact ? 8 : 12
+
+    // Typography sizes
     readonly property int titleSize: 14
     readonly property int bodySize: 11
     readonly property int labelSize: 10
     readonly property int monoSize: 10
-    readonly property int compactSpacing: 6
-    readonly property int sectionSpacing: 8
+
+    // Typography fonts
     readonly property string titleFont: "Avenir Next"
     readonly property string bodyFont: typeof uiBodyFontFamily !== "undefined" ? uiBodyFontFamily : "Helvetica Neue"
     readonly property string monoFont: typeof uiMonoFontFamily !== "undefined" ? uiMonoFontFamily : "Menlo"
 
+    // Helper functions
     function token(darkValue, lightValue) {
         return lightMode ? lightValue : darkValue
     }
@@ -282,17 +359,9 @@ QtObject {
     }
 
     function signalColor(constellationName, used, signalId) {
-        // Always use the constellation colour so bars are grouped by constellation
-        // regardless of which signal frequency band they were observed on.
-        // The small cap drawn on top of each bar (alternateSignal indicator) already
-        // distinguishes multi-frequency signals visually.
         return constellationColor(constellationName, used)
     }
 
-    // Returns a distinct colour for each signalId, used by the small cap on top of
-    // signal bars.  When the same satellite appears more than once in a band tab
-    // (e.g. both L1 C/A and L1C in the L1/B1/L1C tab), the caps show different
-    // colours so the user can tell the two bars apart at a glance.
     function signalCapColor(signalId) {
         var palette = {
             1:  "#ffb454",

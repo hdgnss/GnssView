@@ -1,7 +1,7 @@
 # GnssView UI 回归验证与实测矩阵 (UI Regression Matrix)
 
 **最后更新**: 2026-11-16  
-**当前状态**: Phase 0 基线已建立  
+**当前状态**: Phase 1 完成 (Gate 1 通过)  
 
 ---
 
@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | `GnssViewRegression` | `./build/GnssViewRegression` | **PASS** | 0.8s | 包含 AppController, SatelliteStore, NMEA 解算等核心逻辑测试 |
 | `GnssViewStreamChunkerRegression` | `./build/GnssViewStreamChunkerRegression` | **PASS** | 0.2s | 流数据分片与校验回归测试 |
-| `transport_discovery_regression` | `ctest -R transport_discovery_regression` | **PASS** | 2.68s | CTest 注册的传输层插件探测测试 |
+| `transport_discovery_regression` | `ctest -R transport_discovery_regression` | **PASS** | 2.46s | CTest 注册的传输层插件探测测试 |
 | `qmltestrunner (GenericTransportUi)` | `qmltestrunner -input tests/qml/tst_GenericTransport.qml` | **BASELINE FAIL** | 0.15s | 上游 commit `56b5a49` 在 line 60 断言失败，确认为原有基线问题，已记录追踪 |
 
 ---
@@ -28,6 +28,9 @@
 | `docs/screenshots/baseline_settings_light.png` | 设置中心弹窗 | Light | 3840x2160 (HiDPI @2x) | 亮色模式下设置中心各表单控件对比度与间距 |
 | `docs/screenshots/baseline_dialog_dark.png` | 更新通知弹窗 | Dark | 3840x2160 (HiDPI @2x) | 弹窗遮罩、发布日志滚动区、Later/Download 按钮表现 |
 | `docs/screenshots/baseline_dialog_light.png` | 更新通知弹窗 | Light | 3840x2160 (HiDPI @2x) | 亮色遮罩与对话框边框层次 |
+| `docs/screenshots/gallery_dark.png` | 组件画廊测试样机 | Dark | 1920x1290 | 暗色模式下控件矩阵、GNSS 领域色及状态联动验证 |
+| `docs/screenshots/gallery_light.png` | 组件画廊测试样机 | Light | 1920x1290 | 亮色模式下对比度、边框清晰度与焦点环验证 |
+| `docs/screenshots/gallery_comfortable.png` | 组件画廊测试样机 | Light (Comfortable) | 1920x1290 | 舒适密度排版、控件高 34px 与间距自适应验证 |
 
 ---
 
@@ -46,5 +49,6 @@
 
 - [x] **Design Tokens 基线**: 确认当前散落硬编码颜色与内嵌控件现状
 - [x] **双主题切换**: 确认现有 `uiTheme` 通过 `AppSettings` 驱动并能在暗黑/明亮间切换
-- [x] **测试未破坏**: 既有核心回归测试 100% 通过
-- [x] **无未经授权修改**: Phase 0 严守只读规则，未改动任何源码
+- [x] **Theme.qml 增强与向后兼容**: 保持 100% 现有对外 API，扩充焦点/状态/密度 Token
+- [x] **Control Gallery 画廊验证**: 集中展示双主题、各交互状态与领域色彩
+- [x] **核心回归测试**: 100% 运行通过，无破坏既有模型与算法
