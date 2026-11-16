@@ -91,20 +91,7 @@ Popup {
         wrapMode: Text.WordWrap
     }
 
-    component DenseField: TextField {
-        id: denseControl
-        implicitHeight: theme.controlHeight
-        color: (!enabled || readOnly) ? theme.textSecondary : theme.textPrimary
-        font.family: theme.bodyFont
-        font.pixelSize: theme.bodySize
-        selectByMouse: true
-        padding: 10
-        background: Rectangle {
-            radius: theme.controlRadius
-            color: (!denseControl.enabled || denseControl.readOnly) ? Qt.rgba(theme.inputBg.r, theme.inputBg.g, theme.inputBg.b, 0.45) : theme.inputBg
-            border.width: 1
-            border.color: (!denseControl.enabled || denseControl.readOnly) ? theme.panelBorder : (denseControl.activeFocus ? theme.inputBorderFocus : theme.inputBorder)
-        }
+    component DenseField: AppTextField {
     }
 
     component SectionTitle: Label {
@@ -337,37 +324,9 @@ Popup {
         }
     }
 
-    component PluginComboBox: ComboBox {
-        id: combo
-        implicitHeight: theme.controlHeight
-        font.family: theme.bodyFont
-        font.pixelSize: theme.bodySize
+    component PluginComboBox: AppComboBox {
         textRole: "label"
         valueRole: "value"
-        displayText: {
-            if (currentIndex >= 0 && model && model.length !== undefined && model.length > currentIndex) {
-                var item = model[currentIndex]
-                if (item && item.label !== undefined) {
-                    return String(item.label)
-                }
-            }
-            return currentText
-        }
-        background: Rectangle {
-            radius: theme.controlRadius
-            color: theme.inputBg
-            border.width: 1
-            border.color: parent.activeFocus ? theme.inputBorderFocus : theme.inputBorder
-        }
-        contentItem: Text {
-            leftPadding: 10
-            rightPadding: 26
-            text: parent.displayText
-            color: theme.textPrimary
-            font: parent.font
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
     }
 
     component PluginFieldCheckBox: AppCheckBox {
@@ -636,7 +595,7 @@ Popup {
                             spacing: 8
 
                             DenseField {
-                                width: Math.max(120, parent.width - 90)
+                                Layout.fillWidth: true
                                 text: appSettings ? appSettings.logDirectory : ""
                                 onEditingFinished: if (appSettings) appSettings.logDirectory = text
                             }
@@ -680,7 +639,7 @@ Popup {
                             spacing: 8
 
                             DenseField {
-                                width: Math.max(120, parent.width - 90)
+                                Layout.fillWidth: true
                                 text: appSettings ? appSettings.pluginDirectory : ""
                                 onEditingFinished: if (appSettings) appSettings.pluginDirectory = text
                             }

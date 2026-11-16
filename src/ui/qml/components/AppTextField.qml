@@ -12,16 +12,17 @@ TextField {
         id: theme
     }
 
-    implicitHeight: theme.controlHeight
+    implicitHeight: Math.max(theme.controlHeight, 28)
     font.family: monospace ? theme.monoFont : theme.bodyFont
     font.pixelSize: monospace ? theme.monoSize : theme.bodySize
+    verticalAlignment: TextInput.AlignVCenter
     color: (!enabled || readOnly) ? theme.textSecondary : theme.textPrimary
     placeholderTextColor: theme.textPlaceholder
     selectByMouse: true
     leftPadding: 10
     rightPadding: hasError ? 28 : 10
-    topPadding: 0
-    bottomPadding: 0
+    topPadding: 2
+    bottomPadding: 2
 
     background: Rectangle {
         id: bgRect
