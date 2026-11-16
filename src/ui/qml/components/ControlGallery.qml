@@ -385,7 +385,7 @@ Rectangle {
                         spacing: 10
 
                         Label {
-                            text: "3. Button Variants & Interaction States (Hover / Pressed / Focus Ring / Disabled)"
+                            text: "3. AppButton & NeonButton Compatibility (Variants & Semantic Colors)"
                             color: theme.textPrimary
                             font.family: theme.titleFont
                             font.pixelSize: 13
@@ -397,65 +397,36 @@ Rectangle {
                             columnSpacing: 10
                             rowSpacing: 8
 
-                            Label { text: "Variant"; color: theme.textSecondary; font.pixelSize: 10; font.bold: true }
-                            Label { text: "Default"; color: theme.textSecondary; font.pixelSize: 10 }
-                            Label { text: "Focused"; color: theme.textSecondary; font.pixelSize: 10 }
-                            Label { text: "Success"; color: theme.textSecondary; font.pixelSize: 10 }
-                            Label { text: "Danger"; color: theme.textSecondary; font.pixelSize: 10 }
-                            Label { text: "Disabled"; color: theme.textSecondary; font.pixelSize: 10 }
+                            Label { text: "Variant / Type"; color: theme.textSecondary; font.pixelSize: 10; font.bold: true }
+                            Label { text: "Primary"; color: theme.textSecondary; font.pixelSize: 10 }
+                            Label { text: "Secondary"; color: theme.textSecondary; font.pixelSize: 10 }
+                            Label { text: "Success (ok)"; color: theme.textSecondary; font.pixelSize: 10 }
+                            Label { text: "Danger (bad)"; color: theme.textSecondary; font.pixelSize: 10 }
+                            Label { text: "Outline / Ghost"; color: theme.textSecondary; font.pixelSize: 10 }
 
-                            // Primary Row
-                            Label { text: "Primary"; color: theme.textPrimary; font.bold: true; font.pixelSize: 10 }
-                            NeonButton { text: "Primary"; accent: theme.accentStrong }
-                            Rectangle {
-                                Layout.preferredWidth: 92
-                                Layout.preferredHeight: theme.controlHeight
-                                radius: theme.controlRadius
-                                color: theme.accentStrong
-                                border.width: 2; border.color: theme.focusRingStrong
-                                Text { anchors.centerIn: parent; text: "Focused"; color: "#ffffff"; font.pixelSize: 11; font.bold: true }
-                            }
+                            // AppButton Row
+                            Label { text: "AppButton"; color: theme.textPrimary; font.bold: true; font.pixelSize: 10 }
+                            AppButton { variant: "primary"; text: "Connect" }
+                            AppButton { variant: "secondary"; text: "Configure" }
+                            AppButton { variant: "success"; text: "Start" }
+                            AppButton { variant: "danger"; text: "Erase" }
+                            AppButton { variant: "outline"; text: "Outline" }
+
+                            // NeonButton Proxy Row
+                            Label { text: "NeonButton (Proxy)"; color: theme.textPrimary; font.bold: true; font.pixelSize: 10 }
+                            NeonButton { text: "Accent"; accent: theme.accentStrong }
+                            NeonButton { text: "Default" }
                             NeonButton { text: "Open"; accent: theme.ok }
-                            NeonButton { text: "Disconnect"; accent: theme.bad }
-                            NeonButton { text: "Disabled"; enabled: false }
+                            NeonButton { text: "Close"; accent: theme.bad }
+                            AppButton { variant: "ghost"; text: "Ghost" }
 
-                            // Secondary Row
-                            Label { text: "Secondary"; color: theme.textPrimary; font.bold: true; font.pixelSize: 10 }
-                            Rectangle {
-                                Layout.preferredWidth: 92
-                                Layout.preferredHeight: theme.controlHeight
-                                radius: theme.controlRadius
-                                color: theme.surface2; border.width: 1; border.color: theme.border
-                                Text { anchors.centerIn: parent; text: "Secondary"; color: theme.textPrimary; font.pixelSize: 11 }
-                            }
-                            Rectangle {
-                                Layout.preferredWidth: 92
-                                Layout.preferredHeight: theme.controlHeight
-                                radius: theme.controlRadius
-                                color: theme.surface3; border.width: 2; border.color: theme.focusRingStrong
-                                Text { anchors.centerIn: parent; text: "Focus Ring"; color: theme.textPrimary; font.pixelSize: 11 }
-                            }
-                            Rectangle {
-                                Layout.preferredWidth: 92
-                                Layout.preferredHeight: theme.controlHeight
-                                radius: theme.controlRadius
-                                color: theme.surface2; border.width: 1; border.color: theme.ok
-                                Text { anchors.centerIn: parent; text: "Apply"; color: theme.ok; font.pixelSize: 11; font.bold: true }
-                            }
-                            Rectangle {
-                                Layout.preferredWidth: 92
-                                Layout.preferredHeight: theme.controlHeight
-                                radius: theme.controlRadius
-                                color: theme.surface2; border.width: 1; border.color: theme.bad
-                                Text { anchors.centerIn: parent; text: "Delete"; color: theme.bad; font.pixelSize: 11; font.bold: true }
-                            }
-                            Rectangle {
-                                Layout.preferredWidth: 92
-                                Layout.preferredHeight: theme.controlHeight
-                                radius: theme.controlRadius
-                                color: theme.surface1; border.width: 1; border.color: theme.borderSubtle; opacity: 0.5
-                                Text { anchors.centerIn: parent; text: "Disabled"; color: theme.textDisabled; font.pixelSize: 11 }
-                            }
+                            // States Row
+                            Label { text: "Special States"; color: theme.textSecondary; font.pixelSize: 10 }
+                            AppButton { variant: "primary"; text: "Loading"; loading: true }
+                            AppButton { variant: "secondary"; text: "Disabled"; enabled: false }
+                            AppButton { variant: "success"; text: "Disabled"; enabled: false }
+                            AppButton { variant: "danger"; text: "Disabled"; enabled: false }
+                            AppButton { text: "Secondary" }
                         }
                     }
                 }
@@ -475,7 +446,7 @@ Rectangle {
                         spacing: 8
 
                         Label {
-                            text: "4. Form Controls & Input Fields"
+                            text: "4. Form Controls (AppTextField, AppComboBox, AppCheckBox, AppSwitch)"
                             color: theme.textPrimary
                             font.family: theme.titleFont
                             font.pixelSize: 13
@@ -486,60 +457,36 @@ Rectangle {
                             Layout.fillWidth: true
                             spacing: 12
 
-                            // Normal TextField
+                            // Normal AppTextField
                             ColumnLayout {
                                 spacing: 4
-                                Label { text: "Port / Hostname"; color: theme.textSecondary; font.pixelSize: 10 }
-                                TextField {
-                                    id: normalField
+                                Label { text: "Port / Hostname (AppTextField)"; color: theme.textSecondary; font.pixelSize: 10 }
+                                AppTextField {
                                     implicitWidth: 160
-                                    implicitHeight: theme.controlHeight
                                     text: "192.168.1.100"
-                                    color: theme.textPrimary
-                                    font.family: theme.monoFont
-                                    font.pixelSize: theme.monoSize
-                                    background: Rectangle {
-                                        color: theme.inputBg; radius: theme.controlRadius
-                                        border.width: 1; border.color: normalField.activeFocus ? theme.inputBorderFocus : theme.inputBorder
-                                    }
+                                    placeholderText: "e.g. 192.168.1.1"
                                 }
                             }
 
-                            // Error TextField
+                            // Error AppTextField
                             ColumnLayout {
                                 spacing: 4
                                 Label { text: "Baudrate (Validation Error)"; color: theme.bad; font.pixelSize: 10 }
-                                TextField {
+                                AppTextField {
                                     implicitWidth: 160
-                                    implicitHeight: theme.controlHeight
                                     text: "99999999"
-                                    color: theme.bad
-                                    font.family: theme.monoFont
-                                    font.pixelSize: theme.monoSize
-                                    background: Rectangle {
-                                        color: theme.inputBg; radius: theme.controlRadius
-                                        border.width: 1; border.color: theme.bad
-                                    }
+                                    hasError: true
+                                    errorMessage: "Baudrate exceeds maximum supported (921600)"
                                 }
                             }
 
-                            // ComboBox
+                            // AppComboBox
                             ColumnLayout {
                                 spacing: 4
-                                Label { text: "Protocol / Interface"; color: theme.textSecondary; font.pixelSize: 10 }
-                                ComboBox {
-                                    id: comboControl
+                                Label { text: "Protocol / Interface (AppComboBox)"; color: theme.textSecondary; font.pixelSize: 10 }
+                                AppComboBox {
                                     implicitWidth: 170
-                                    implicitHeight: theme.controlHeight
                                     model: ["UART / Serial", "TCP Client", "UDP Server", "Bluetooth Plugin"]
-                                    background: Rectangle {
-                                        color: theme.surface2; radius: theme.controlRadius
-                                        border.width: 1; border.color: theme.border
-                                    }
-                                    contentItem: Text {
-                                        leftPadding: 8; text: comboControl.displayText
-                                        color: theme.textPrimary; font.pixelSize: 11; verticalAlignment: Text.AlignVCenter
-                                    }
                                 }
                             }
 

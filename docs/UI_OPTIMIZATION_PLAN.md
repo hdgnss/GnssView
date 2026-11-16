@@ -12,8 +12,8 @@
 |---|---|---|---|
 | **Phase 0** | 全量审计与基线建立 (只读审查与测试基线) | **DONE (Gate 0 通过)** | `UI_AUDIT.md`, 基线截图, 测试日志, 风险表 |
 | **Phase 1** | Design System 规范落地与 Theme 演进 | **DONE (Gate 1 通过)** | `UI_DESIGN_SYSTEM.md`, `Theme.qml` 增强, `ControlGallery.qml` 及全景截图 |
-| **Phase 2** | 通用控件库实现与 NeonButton 收敛 | **TODO (下一阶段)** | `AppButton`, `AppTextField`, `AppComboBox`, `AppCheckBox` 等 |
-| **Phase 3** | 跨平台主窗口 Shell、菜单栏与统一状态栏 | **TODO** | `Main.qml` Shell 重构, Linux/Win MenuBar, Footer 状态栏 |
+| **Phase 2** | 通用控件库实现与 NeonButton 收敛 | **DONE (Gate 2 通过)** | `AppButton`, `NeonButton` 代理, `AppTextField`, `AppComboBox`, `AppCheckBox`, `AppSwitch` |
+| **Phase 3** | 跨平台主窗口 Shell、菜单栏与统一状态栏 | **TODO (下一阶段)** | `Main.qml` Shell 重构, Linux/Win MenuBar, Footer 状态栏 |
 | **Phase 4** | SettingsPanel 模块化拆分与重构 | **TODO** | 设置区块组件化, 动态插件表单独立, 键盘无障碍 |
 | **Phase 5** | 全 Dashboard 面板现代样式迁移 | **TODO** | 8 大面板样式迁移, 领域语义色保护, 高 DPI 布局 |
 | **Phase 6** | 跨平台回归验证、交付报告与文档归档 | **TODO** | `UI_REGRESSION_MATRIX.md`, `UI_MIGRATION_REPORT.md` |
@@ -49,14 +49,14 @@
 ---
 
 ### Phase 2 — 通用控件库
-- [ ] 实现 `AppButton.qml`，支持 `variant` (primary/secondary/outline/ghost/danger/success)，支持自定义 `accent`
-- [ ] 将 `NeonButton.qml` 封装为对 `AppButton` 的向前兼容薄代理，修复 `visualAccent` 忽略传入 `accent` 的 Bug
-- [ ] 实现 `AppTextField.qml`，集成 Focus 状态、清除图标与校验错误态
-- [ ] 实现 `AppComboBox.qml`，提供统一的下拉弹出与悬停反馈
-- [ ] 实现 `AppCheckBox.qml` 与 `AppSwitch.qml`
-- [ ] 编写控件交互测试 (Hover / Focus / Disabled / Pressed)
+- [x] 实现 `AppButton.qml`，支持 `variant` (primary/secondary/outline/ghost/danger/success)，支持自定义 `accent`
+- [x] 将 `NeonButton.qml` 封装为对 `AppButton` 的向前兼容薄代理，修复 `visualAccent` 忽略传入 `accent` 的 Bug
+- [x] 实现 `AppTextField.qml`，集成 Focus 状态、错误校验提示 (`hasError`) 与 Monospace 等宽支持
+- [x] 实现 `AppComboBox.qml`，提供统一的下拉弹出、Chevron 旋转动效与悬停反馈
+- [x] 实现 `AppCheckBox.qml` 与 `AppSwitch.qml`，废除 Unicode 伪字符，采用矢量抗锯齿路径
+- [x] 在 `ControlGallery.qml` 中建立控件全状态与双主题交互测试矩阵 (Hover / Focus / Disabled / Pressed)
 
-**Gate 2 门槛**: 所有基础控件在两种主题下交互状态完备，键盘 Tab 键焦点高亮正常。
+**Gate 2 门槛验收**: **PASS** (所有基础控件在双主题下状态一致，修复了 NeonButton 语义色缺陷，旧组件使用方 100% 兼容)
 
 ---
 

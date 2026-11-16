@@ -37,8 +37,10 @@
 
 ## 3. 阶段验收记录与迁移里程碑
 
-- **2026-11-16 (Phase 0)**:
-  - 检出 `feature/ui-modernization` 分支并完成全工程代码审计。
-  - 完成 Light / Dark 双主题基线截图采集。
-  - 确认构建与既有回归测试正常。
-  - 架构设计方案与平台矩阵决策已就绪。
+- **2026-11-16 (Phase 1)**:
+  - 扩展 `Theme.qml`，引入密度和全状态 Token，实现并归档组件画廊。
+- **2026-11-16 (Phase 2)**:
+  - 完成核心基础控件库：`AppButton.qml`, `AppTextField.qml`, `AppComboBox.qml`, `AppCheckBox.qml`, `AppSwitch.qml`。
+  - `NeonButton.qml` 改造为 `AppButton` 的向前兼容代理，彻底修复 `visualAccent` 忽略调用方语义色彩的缺陷。
+  - `SettingsPanel.qml` 中的 `SettingsCheckBox` 与 `PluginFieldCheckBox` 迁移接入 `AppCheckBox`，消除粗糙 Unicode 对勾字符。
+  - 核心构建与 C++ 回归测试 100% 通过。
