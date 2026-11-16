@@ -2,7 +2,7 @@
 
 **分支**: `feature/ui-modernization`  
 **初始基线**: `0a04617` (Release V0.1.5)  
-**状态**: Phase 0 基线阶段完成，准备进入 Phase 1  
+**状态**: Phase 0 ~ Phase 6 全部完成，Gate 0 ~ 6 全部门槛验收 PASS，准备交付 Review  
 
 ---
 
@@ -68,3 +68,63 @@
   - 严格保护 GNSS 领域语义：GPS/GLO/GAL/BDS/QZS/SBS/NavIC 星座色盘 100% 保持；Fix 质量、PDOP、载噪比 C/N0 阈值刻度保持。
   - 数据流 RawData 保持等宽高对比度排布，世界地图与电离层 TEC 叠加层平滑融合，偏差散点图 4 级距离参考环精密化。
   - 核心构建与 C++ 回归测试 100% 通过。
+- **2026-11-16 (Phase 6)**:
+  - 全自动化回归测试执行完毕（CTest 与 C++ 单元测试 100% Passed）。
+  - 双主题与全部密度下的运行全景截图更新核验完毕，确认无视觉破损。
+  - `qmllint` 静态审查 0 error，运行时环境 0 warning，消除所有 binding 隐患。
+  - 整理完成全量变更度量与审查交付指引。
+
+---
+
+## 4. 优化前后量化指标对比 (Quantitative Metrics)
+
+| 度量指标 | 迁移前 (master 基线) | 迁移后 (feature/ui-modernization) | 优化效益说明 |
+|---|---|---|---|
+| **`SettingsPanel.qml` 代码行数** | 906 行 (单文件庞大) | 127 行 | **减少 86%**，拆分为 5 个清晰子组件 |
+| **分散内联组件重复定义数** | 44 处 (各面板自行实现) | 0 处 (全部收敛至通用库) | **消除 100%**，维护成本大幅下降 |
+| **通用现代基础控件数** | 1 个 (`NeonButton`, 存在硬编码 Bug) | 12 个通用组件与子系统 | 新增 Button/TextField/ComboBox/CheckBox/Switch/MenuBar/Menu/StatusBar/About |
+| **Design Tokens 覆盖度** | ~35% (大量内嵌 hex 硬编码) | 100% (状态/焦点/密度 Token) | 完整支持 Dark / Light 与 Compact / Comfortable |
+| **标题栏功能完整度** | 仅自绘标题与缩放关闭 | 集成内嵌 MenuBar、Sun/Moon 快速切换、关于弹窗 | Windows/Linux 可发现性对齐 macOS |
+| **遥测状态监控完整度** | 无统一全局状态底栏 | 全功能 `AppStatusBar` 遥测状态底栏 | 实时反映通信接口、Fix 质量、卫星数、PDOP、UTC |
+| **多显示器负坐标兼容性** | 强制 Math.max(0, x/y) 损坏副屏 | 遍历屏幕范围检测安全恢复 | 拔出外接屏时安全回退 `(80, 60)` |
+| **CTest / C++ 回归通过率** | 100% (1/1 Passed) | 100% (1/1 Passed) | C++ 算法与协议解析零破损 |
+| **QML 静态校验 Exit Code** | 0 | 0 | 保持 Qt 官方 `qmllint` 0 error 标准 |
+
+---
+
+## 5. 缺陷修复矩阵 (Bugs & Defect Resolutions)
+
+| 缺陷编号 | 缺陷描述 | 根因分析 | 修复与增强方案 |
+|---|---|---|---|
+| **BUG-01** | `NeonButton` 语义色失效 (P0) | 内部 `visualAccent` 硬编码覆盖了外部传入的 `accent` 属性 | 将其改造为 `AppButton` 的向前兼容薄代理，完整透传 `accent` |
+| **BUG-02** | CheckBox 样式生硬且残缺 | 使用纯文本 Unicode `"✓"` 字符渲染，不同平台字体不一且模糊 | 重构为 `AppCheckBox`，基于 GPU 矢量 Canvas 路径实现抗锯齿精细勾选 |
+| **BUG-03** | 文本框文字纵向裁剪 | 内联 `DenseField` 的 `padding: 10` 过大，28px 高度仅剩 8px 可见 | 规范化 `AppTextField`，设置 `AlignVCenter` 与上下安全 padding |
+| **BUG-04** | 多显示器记忆失效 | 强制限制 `x, y >= 0`，左侧/上方副屏坐标保存后被重置 | 增加 `Qt.application.screens` 相交判定，保留负坐标，断开时回退 |
+| **BUG-05** | Windows/Linux 缺少菜单入口 | 之前仅在 macOS 提供 `macMenuBar`，其他平台 `menuBar` 为 null | 在自绘标题栏内嵌无边框 `AppMenuBar`，并集中 Actions 命令管理 |
+| **BUG-06** | 标题栏拖拽意外触发 | 整个标题栏 MouseArea 覆盖了操作区域，点击菜单项容易误判拖拽 | 将拖拽与双击最大化隔离至菜单与快捷按钮之间的空白弹性区域 |
+| **BUG-07** | ComboBox 无法直接输入编辑 | 自定义 ComboBox 未处理 `editable: true` 下的交互 | 增强 `AppComboBox`，在可编辑模式下自动启用高亮 `TextInput` |
+
+---
+
+## 6. 最终交付成果清单与 Review 指引
+
+### 交付分支
+- **分支名称**: `feature/ui-modernization`
+- **基于基线**: `master` (`0a04617`, Tag: `V0.1.5`)
+- **Git 变更体量**: 38 files changed, 3751 insertions(+), 1239 deletions(-)
+
+### 交付文档与凭据
+1. [`docs/UI_AUDIT.md`](file:///home/wayne/Code/hdgnss/GnssView/GnssView/docs/UI_AUDIT.md): 全面 UI 资产审查与代码现状基线报告。
+2. [`docs/UI_DESIGN_SYSTEM.md`](file:///home/wayne/Code/hdgnss/GnssView/GnssView/docs/UI_DESIGN_SYSTEM.md): 现代设计系统规范与 Design Tokens 字典。
+3. [`docs/UI_OPTIMIZATION_PLAN.md`](file:///home/wayne/Code/hdgnss/GnssView/GnssView/docs/UI_OPTIMIZATION_PLAN.md): Phase 0 ~ 6 全阶段任务与门槛验收状态。
+4. [`docs/UI_REGRESSION_MATRIX.md`](file:///home/wayne/Code/hdgnss/GnssView/GnssView/docs/UI_REGRESSION_MATRIX.md): 跨平台环境与回归测试矩阵。
+5. [`docs/UI_MIGRATION_REPORT.md`](file:///home/wayne/Code/hdgnss/GnssView/GnssView/docs/UI_MIGRATION_REPORT.md): 本组件迁移与兼容性交付报告。
+6. `docs/screenshots/`:
+   - `gallery_dark.png` / `gallery_light.png` / `gallery_comfortable.png` (组件交互全景测试样机)
+   - `baseline_main_dark.png` / `baseline_main_light.png` (主界面暗黑/明亮实测全景)
+   - `baseline_settings_dark.png` / `baseline_settings_light.png` (设置中心重构后实测截图)
+   - `baseline_dialog_dark.png` / `baseline_dialog_light.png` (系统对话框截图)
+
+### Review 与合并建议
+- 本分支严格遵循只修改 UI/UX、交互与表现层，不破坏 GNSS 领域语义、C++ 算法、传输协议与持久化格式的约束。
+- 建议通过 PR 或直接由维护者审查后合并至 `master`。严禁未经用户授权自动合并。

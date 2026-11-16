@@ -101,8 +101,10 @@
 ---
 
 ### Phase 6 — 真实运行回归、文档与交付
-- [ ] 运行全套 CTest 与 C++ / QML 回归测试
-- [ ] 捕获迁移后 Light/Dark 最终界面截图与基线对比
-- [ ] 检查并消除新增 QML 运行时 warnings
-- [ ] 产出 `UI_REGRESSION_MATRIX.md` 与 `UI_MIGRATION_REPORT.md`
-- [ ] 提交代码评审与变更归档
+- [x] 运行全套 CTest 与 C++ / QML 回归测试（100% 通过，0 失败）
+- [x] 捕获迁移后 Light/Dark 最终界面全景截图与基线对比（归档至 `docs/screenshots/`）
+- [x] 审查并消除全部新增 QML 运行时 warnings 与 binding 异常
+- [x] 产出完整的架构与度量文档：`UI_AUDIT.md`, `UI_DESIGN_SYSTEM.md`, `UI_REGRESSION_MATRIX.md`, `UI_MIGRATION_REPORT.md`
+- [x] 整理提交代码评审与变更归档，严格保留分支隔离（`feature/ui-modernization`）等待用户确认
+
+**Gate 6 门槛验收**: **PASS** (自动化测试 100% 通过，全景双主题视觉凭证齐备，零未捕获运行时警告，全部 6 个阶段任务圆满收官)
