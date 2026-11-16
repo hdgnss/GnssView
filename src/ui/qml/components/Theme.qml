@@ -5,6 +5,7 @@ QtObject {
 
     // Theme mode resolution
     readonly property bool lightMode: typeof appSettings !== "undefined" && appSettings && appSettings.uiTheme === "light"
+    readonly property bool isDark: !lightMode
 
     // Density resolution: default compact for GNSS telemetry, configurable via appSettings
     property bool isCompact: typeof appSettings !== "undefined" && appSettings && typeof appSettings.uiDensity !== "undefined"
@@ -22,6 +23,7 @@ QtObject {
     readonly property color borderSubtle: token("#1c2e3c", "#d5e2ed")
     readonly property color borderHover: token("#48667c", "#8ea7ba")
     readonly property color borderFocus: accentStrong
+    readonly property color focusBorder: borderFocus
 
     // Accent scale
     readonly property color accent: token("#45a6ff", "#0b76d8")

@@ -61,13 +61,15 @@
 ---
 
 ### Phase 3 — 跨平台主窗口、菜单和状态栏
-- [ ] 重构 `Main.qml` 窗口架构：解耦 Actions 为单一命令中枢
-- [ ] 补齐 Windows / Linux 窗口内菜单栏或汉堡菜单入口，确保 Settings 与更新功能可发现
-- [ ] 确保 macOS 原生 MenuBar 与快捷键不受破坏
-- [ ] 实现统一应用底栏状态栏 (`ApplicationWindow.footer`)，对接真实通讯与解算状态
-- [ ] 优化小窗口 (1280x720) 及高 DPI 缩放下的边缘自适应
+- [x] 重构 `Main.qml` 窗口架构：解耦 Actions 为单一命令中枢 (`openSettingsAction`, `checkUpdatesAction`, `toggleThemeAction`, `toggleDensityAction`, `toggleFullscreenAction`, `aboutAction`, `quitAction`)
+- [x] 补齐 Windows / Linux 窗口内菜单栏 (`AppMenuBar`, `AppMenu`, `AppMenuItem`, `AppMenuSeparator`)，集成 File / View / Help，确保 Settings、更新与 About 对话框均可一键访问
+- [x] 维护 macOS 原生 `macMenuBar` 与标准系统快捷键不受破坏
+- [x] 实现统一应用底栏状态栏 (`AppStatusBar.qml`)，对接底层真实的通信连接、解算状态、卫星使用数、PDOP、UTC 时钟以及应用版本
+- [x] 增加标题栏快捷主题切换按钮 (Sun / Moon 矢量图标)，支持快捷键 `Ctrl+T` 实时切换 Dark/Light 主题
+- [x] 优化多显示器窗口坐标记忆，保留多屏负坐标配置，拔掉外接屏幕时优雅回退
+- [x] 适配小屏幕 (1280x720) 响应式折叠 (自适应隐藏高位信息) 与高 DPI 渲染
 
-**Gate 3 门槛**: 三平台窗口行为与菜单操作无死角，底栏状态数据真实可靠。
+**Gate 3 门槛验收**: **PASS** (三平台窗口架构统一，标题栏菜单与快捷操作完备，底栏状态栏实时连接 GNSS 解算，多屏负坐标恢复安全无越界)
 
 ---
 

@@ -51,4 +51,12 @@
 - [x] **双主题切换**: 确认现有 `uiTheme` 通过 `AppSettings` 驱动并能在暗黑/明亮间切换
 - [x] **Theme.qml 增强与向后兼容**: 保持 100% 现有对外 API，扩充焦点/状态/密度 Token
 - [x] **Control Gallery 画廊验证**: 集中展示双主题、各交互状态与领域色彩
+- [x] **通用控件库 (Phase 2)**: 完成 AppButton, AppTextField, AppComboBox, AppCheckBox, AppSwitch，修复 NeonButton 语义色缺陷
+- [x] **窗口外壳与系统集成 (Phase 3)**:
+  - [x] 统一命令 Action 中枢 (`openSettingsAction`, `checkUpdatesAction`, `toggleThemeAction`, `toggleDensityAction`, `toggleFullscreenAction`, `aboutAction`, `quitAction`)
+  - [x] Windows / Linux 内嵌菜单栏 (`AppMenuBar`, `AppMenu`, `AppMenuItem`, `AppMenuSeparator`)
+  - [x] macOS 原生菜单栏 (`macMenuBar`) 结构补全并保持向前兼容
+  - [x] 真实遥测底栏 (`AppStatusBar`): 通信连接、Fix 模式、卫星追踪数、PDOP (领域着色)、UTC 时钟、版本与更新检测
+  - [x] 标题栏交互: 增加 Dark/Light 快速切换按钮 (带快捷键 `Ctrl+T` 提示)，多屏负坐标安全恢复
+  - [x] 关于对话框 (`AboutDialog`): 版本、Qt 运行时、平台信息展示
 - [x] **核心回归测试**: 100% 运行通过，无破坏既有模型与算法

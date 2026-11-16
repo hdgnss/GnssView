@@ -44,3 +44,13 @@
   - `NeonButton.qml` 改造为 `AppButton` 的向前兼容代理，彻底修复 `visualAccent` 忽略调用方语义色彩的缺陷。
   - `SettingsPanel.qml` 中的 `SettingsCheckBox` 与 `PluginFieldCheckBox` 迁移接入 `AppCheckBox`，消除粗糙 Unicode 对勾字符。
   - 核心构建与 C++ 回归测试 100% 通过。
+- **2026-11-16 (Phase 3)**:
+  - 窗口外壳与系统集成重构完成：`Main.qml` 集中 Action 命令中枢。
+  - 实现通用菜单系统：`AppMenuBar.qml`, `AppMenu.qml`, `AppMenuItem.qml`, `AppMenuSeparator.qml`。
+  - Windows / Linux 增加标题栏内嵌菜单栏，macOS 完善原生菜单栏 (`macMenuBar`)。
+  - 实现全功能底栏状态栏 `AppStatusBar.qml`（通信连接状态、Fix 质量、卫星使用统计、PDOP 领域着色、UTC 实时时钟、版本检测）。
+  - 实现标准关于对话框 `AboutDialog.qml`。
+  - 标题栏增加暗黑/明亮主题切换快捷按钮 (Sun / Moon 矢量图标与 `Ctrl+T` 快捷键)。
+  - 多显示器窗口坐标记忆优化，支持跨屏负坐标安全恢复与断开回退保护。
+  - 重新采集并更新 `baseline_main_dark.png` 与 `baseline_main_light.png`。
+  - 核心构建与 C++ 回归测试 100% 通过。

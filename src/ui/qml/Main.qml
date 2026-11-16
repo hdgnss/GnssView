@@ -57,8 +57,54 @@ ApplicationWindow {
 
     Action {
         id: checkUpdatesAction
-        text: "Check for Updates..."
+        text: "Check for Updates\u2026"
         onTriggered: if (updateChecker) updateChecker.checkForUpdates(false)
+    }
+
+    Action {
+        id: toggleThemeAction
+        text: theme.isDark ? "Light Theme" : "Dark Theme"
+        shortcut: "Ctrl+T"
+        onTriggered: {
+            if (appSettings) {
+                appSettings.setUiTheme(theme.isDark ? "light" : "dark")
+            }
+        }
+    }
+
+    Action {
+        id: toggleDensityAction
+        text: theme.isCompact ? "Comfortable Density" : "Compact Density"
+        shortcut: "Ctrl+D"
+        onTriggered: {
+            theme.isCompact = !theme.isCompact
+        }
+    }
+
+    Action {
+        id: toggleFullscreenAction
+        text: window.visibility === Window.FullScreen ? "Exit Fullscreen" : "Fullscreen"
+        shortcut: StandardKey.FullScreen
+        onTriggered: {
+            if (window.visibility === Window.FullScreen) {
+                window.visibility = windowSettings.maximized ? Window.Maximized : Window.Windowed
+            } else {
+                window.visibility = Window.FullScreen
+            }
+        }
+    }
+
+    Action {
+        id: aboutAction
+        text: "About GnssView\u2026"
+        onTriggered: aboutDialog.open()
+    }
+
+    Action {
+        id: quitAction
+        text: "Quit"
+        shortcut: StandardKey.Quit
+        onTriggered: window.close()
     }
 
     menuBar: window.isMac ? macMenuBar : null
@@ -76,10 +122,49 @@ ApplicationWindow {
             MenuItem {
                 action: checkUpdatesAction
             }
+
+            MenuSeparator {}
+
+            MenuItem {
+                action: quitAction
+            }
+        }
+
+        Menu {
+            title: "View"
+
+            MenuItem {
+                action: toggleThemeAction
+            }
+
+            MenuItem {
+                action: toggleDensityAction
+            }
+
+            MenuSeparator {}
+
+            MenuItem {
+                action: toggleFullscreenAction
+            }
+        }
+
+        Menu {
+            title: "Help"
+
+            MenuItem {
+                action: checkUpdatesAction
+            }
+
+            MenuItem {
+                action: aboutAction
+            }
         }
     }
 
     header: window.useThemedChrome ? themedHeader : null
+    footer: AppStatusBar {
+        id: appStatusBar
+    }
 
     Rectangle {
         id: themedHeader
@@ -109,30 +194,14 @@ ApplicationWindow {
                 }
             }
 
-            MouseArea {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                    bottom: parent.bottom
-                    rightMargin: titleActionRow.width + 18
-                }
-                acceptedButtons: Qt.LeftButton
-                propagateComposedEvents: true
-                onPressed: mouse => {
-                    if (window.visibility !== Window.Maximized)
-                        window.startSystemMove()
-                }
-                onDoubleClicked: window.toggleMaximized()
-            }
-
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
-                spacing: 10
+                spacing: 8
 
                 Label {
+                    id: appTitleLabel
                     text: "GnssView"
                     color: theme.textPrimary
                     font.family: theme.titleFont
@@ -140,13 +209,110 @@ ApplicationWindow {
                     font.bold: true
                 }
 
+                AppMenuBar {
+                    id: winMenuBar
+                    visible: !window.isMac
+                    Layout.alignment: Qt.AlignVCenter
+
+                    AppMenu {
+                        title: "File"
+                        AppMenuItem { action: openSettingsAction }
+                        AppMenuSeparator {}
+                        AppMenuItem { action: quitAction }
+                    }
+
+                    AppMenu {
+                        title: "View"
+                        AppMenuItem { action: toggleThemeAction }
+                        AppMenuItem { action: toggleDensityAction }
+                        AppMenuSeparator {}
+                        AppMenuItem { action: toggleFullscreenAction }
+                    }
+
+                    AppMenu {
+                        title: "Help"
+                        AppMenuItem { action: checkUpdatesAction }
+                        AppMenuItem { action: aboutAction }
+                    }
+                }
+
                 Item {
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+                        onPressed: mouse => {
+                            if (window.visibility !== Window.Maximized)
+                                window.startSystemMove()
+                        }
+                        onDoubleClicked: window.toggleMaximized()
+                    }
                 }
 
                 RowLayout {
                     id: titleActionRow
-                    spacing: 10
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 24
+                        radius: theme.controlRadius
+                        color: themeToggleMa.pressed ? Qt.rgba(theme.surface4.r, theme.surface4.g, theme.surface4.b, 0.85)
+                                                     : Qt.rgba(theme.surface0.r, theme.surface0.g, theme.surface0.b, themeToggleMa.containsMouse ? 0.82 : 0.62)
+                        border.width: 1
+                        border.color: Qt.rgba(theme.accentStrong.r, theme.accentStrong.g, theme.accentStrong.b, themeToggleMa.containsMouse ? 0.7 : 0.42)
+                        ToolTip.visible: themeToggleMa.containsMouse
+                        ToolTip.delay: 450
+                        ToolTip.text: theme.isDark ? "Switch to Light Theme (Ctrl+T)" : "Switch to Dark Theme (Ctrl+T)"
+
+                        Canvas {
+                            id: themeCanvas
+                            anchors.centerIn: parent
+                            width: 14
+                            height: 14
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.fillStyle = theme.textPrimary
+                                ctx.strokeStyle = theme.textPrimary
+                                ctx.lineWidth = 1.3
+                                ctx.lineCap = "round"
+                                if (theme.isDark) {
+                                    ctx.beginPath()
+                                    ctx.arc(7, 7, 3.2, 0, Math.PI * 2)
+                                    ctx.stroke()
+                                    for (var i = 0; i < 8; ++i) {
+                                        var a = i * Math.PI / 4
+                                        ctx.beginPath()
+                                        ctx.moveTo(7 + Math.cos(a) * 4.6, 7 + Math.sin(a) * 4.6)
+                                        ctx.lineTo(7 + Math.cos(a) * 6.3, 7 + Math.sin(a) * 6.3)
+                                        ctx.stroke()
+                                    }
+                                } else {
+                                    ctx.beginPath()
+                                    ctx.arc(6.5, 7, 4.5, -0.4 * Math.PI, 0.8 * Math.PI, false)
+                                    ctx.arc(8, 5.5, 3.5, 0.8 * Math.PI, -0.4 * Math.PI, true)
+                                    ctx.closePath()
+                                    ctx.stroke()
+                                }
+                            }
+                            Connections {
+                                target: theme
+                                function onIsDarkChanged() {
+                                    themeCanvas.requestPaint()
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            id: themeToggleMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: toggleThemeAction.trigger()
+                        }
+                    }
 
                     Rectangle {
                         Layout.preferredWidth: 30
@@ -294,10 +460,41 @@ ApplicationWindow {
             restoringWindowState = false
             return
         }
-        width = Math.max(minimumWidth, windowSettings.widthValue || 1920)
-        height = Math.max(minimumHeight, windowSettings.heightValue || 1080)
-        x = Math.max(0, windowSettings.xValue || 80)
-        y = Math.max(0, windowSettings.yValue || 60)
+        var targetW = Math.max(minimumWidth, windowSettings.widthValue || 1280)
+        var targetH = Math.max(minimumHeight, windowSettings.heightValue || 720)
+        var targetX = windowSettings.xValue !== undefined ? windowSettings.xValue : 80
+        var targetY = windowSettings.yValue !== undefined ? windowSettings.yValue : 60
+
+        // Multi-monitor support: preserve negative coordinates if window intersects any active screen
+        var intersectsScreen = false
+        var screens = (typeof Qt.application.screens !== "undefined") ? Qt.application.screens : []
+        if (screens && screens.length > 0) {
+            for (var i = 0; i < screens.length; ++i) {
+                var s = screens[i]
+                var sLeft = s.virtualX !== undefined ? s.virtualX : 0
+                var sTop = s.virtualY !== undefined ? s.virtualY : 0
+                var sRight = sLeft + s.width
+                var sBottom = sTop + s.height
+
+                if (targetX + targetW > sLeft + 100 && targetX < sRight - 100 &&
+                    targetY + targetH > sTop + 100 && targetY < sBottom - 100) {
+                    intersectsScreen = true
+                    break
+                }
+            }
+        } else {
+            intersectsScreen = true
+        }
+
+        if (!intersectsScreen) {
+            targetX = 80
+            targetY = 60
+        }
+
+        width = targetW
+        height = targetH
+        x = targetX
+        y = targetY
         Qt.callLater(function() {
             if (windowSettings.maximized) {
                 visibility = Window.Maximized
@@ -377,7 +574,7 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.leftMargin: visibility === Window.Maximized ? 8 : 12
         anchors.rightMargin: visibility === Window.Maximized ? 8 : 12
-        anchors.bottomMargin: visibility === Window.Maximized ? 8 : 12
+        anchors.bottomMargin: visibility === Window.Maximized ? 4 : 6
         anchors.topMargin: window.isMac ? (8 + chromeInsetTop) : 0
         radius: visibility === Window.Maximized ? 8 : theme.shellRadius
         color: theme.shellGlass
@@ -390,7 +587,7 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.leftMargin: visibility === Window.Maximized ? (window.width < 1600 ? 10 : 14) : (window.width < 1600 ? 12 : 18)
         anchors.rightMargin: visibility === Window.Maximized ? (window.width < 1600 ? 10 : 14) : (window.width < 1600 ? 12 : 18)
-        anchors.bottomMargin: visibility === Window.Maximized ? (window.height < 920 ? 8 : 14) : (window.height < 920 ? 10 : 18)
+        anchors.bottomMargin: visibility === Window.Maximized ? (window.height < 920 ? 6 : 10) : (window.height < 920 ? 8 : 12)
         anchors.topMargin: window.isMac ? (12 + chromeInsetTop) : 2
         readonly property int gap: window.height < 920 ? 8 : 12
         readonly property real unitWidth: (width - gap * 3) / 4
@@ -477,6 +674,10 @@ ApplicationWindow {
 
     SettingsPanel {
         id: settingsPanel
+    }
+
+    AboutDialog {
+        id: aboutDialog
     }
 
     Connections {
