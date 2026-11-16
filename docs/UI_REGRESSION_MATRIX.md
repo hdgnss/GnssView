@@ -65,4 +65,14 @@
   - [x] 动态插件字段表单组件 `PluginSettingsForm.qml` 封装
   - [x] 全面接入 Phase 2 通用控件（AppButton, AppTextField, AppComboBox, AppCheckBox）
   - [x] 双主题下弹窗截图重捕获验证（`baseline_settings_dark.png`, `baseline_settings_light.png`）
+- [x] **全仪表盘面板迁移 (Phase 5)**:
+  - [x] `GlassPanel.qml`: 统一卡片样式、标题文字与自适应边界
+  - [x] `TransportConfigPanel.qml`: 接入 `AppTextField` 与 `AppComboBox`，消除重复内嵌实现
+  - [x] `DataPanel.qml`: 保护 Location 指标卡片与 RawData 高对比度排布
+  - [x] `SkyViewPanel.qml`: 100% 保持 GNSS 星座色盘与仰角环极坐标刻度
+  - [x] `CommandButtonsPanel.qml`: 接入通用控件库，消除内部重复组件，保护按钮颜色映射
+  - [x] `SignalBarsPanel.qml`: 频段切换 Tab 与星座色盘统一，等宽数字排布
+  - [x] `WorldLocationPanel.qml`: 罗宾逊投影世界地图与 TEC 叠加层呈现
+  - [x] `DeviationMapPanel.qml`: 4 级距离参考环与历史点阵精密化呈现
+  - [x] `AutoTestPanel.qml`: 自动化测试宿主全量主题 Token 字典注入
 - [x] **核心回归测试**: 100% 运行通过，无破坏既有模型与算法

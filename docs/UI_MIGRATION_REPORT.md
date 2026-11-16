@@ -62,3 +62,9 @@
   - 增加 Compact/Comfortable 密度选择，优化弹窗小屏幕自适应及 Esc 退出。
   - 重新采集并更新 `baseline_settings_dark.png` 与 `baseline_settings_light.png`。
   - 核心构建与 C++ 回归测试 100% 通过。
+- **2026-11-16 (Phase 5)**:
+  - 全仪表盘 8 大功能面板完成现代化样式升级与统一。
+  - `AppComboBox` 增强支持 `editable: true`（内置 `TextInput` 与选中高亮），消除 `TransportConfigPanel` 与 `CommandButtonsPanel` 中的全部 `DenseTextField` 与 `DenseComboBox` 重复定义。
+  - 严格保护 GNSS 领域语义：GPS/GLO/GAL/BDS/QZS/SBS/NavIC 星座色盘 100% 保持；Fix 质量、PDOP、载噪比 C/N0 阈值刻度保持。
+  - 数据流 RawData 保持等宽高对比度排布，世界地图与电离层 TEC 叠加层平滑融合，偏差散点图 4 级距离参考环精密化。
+  - 核心构建与 C++ 回归测试 100% 通过。

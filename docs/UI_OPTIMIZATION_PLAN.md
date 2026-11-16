@@ -86,17 +86,17 @@
 ---
 
 ### Phase 5 — 全 Dashboard / 面板样式迁移
-- [ ] 迁移 `GlassPanel.qml` 卡片样式与统一 Header
-- [ ] 迁移 `TransportConfigPanel.qml` (替换重复控件，保留通信配置与插件加载)
-- [ ] 迁移 `DataPanel.qml` (统一指标卡片与数据流高亮)
-- [ ] 迁移 `SkyViewPanel.qml` (保留星空极坐标色彩与图例，优化暗深色层级)
-- [ ] 迁移 `CommandButtonsPanel.qml` (优化指令按钮排布与响应)
-- [ ] 迁移 `SignalBarsPanel.qml` (优化载噪比柱状图与频段切换体验)
-- [ ] 迁移 `WorldLocationPanel.qml` (优化世界地图与 TEC 叠加层呈现)
-- [ ] 迁移 `DeviationMapPanel.qml` (散点图精密化显示)
-- [ ] 迁移 `AutoTestPanel.qml`
+- [x] 迁移 `GlassPanel.qml`: 规范卡片渐变背景、边框层次、标题栏与内容区域自适应
+- [x] 迁移 `TransportConfigPanel.qml`: 接入 `AppTextField` 与 `AppComboBox`，消除重复内嵌实现，保留全部通信参数与插件自定义 UI 加载机制
+- [x] 迁移 `DataPanel.qml`: 保护 Location 遥测指标卡片语义色彩，RawData 流等宽字体与 NMEA/BIN 标签高对比度呈现
+- [x] 迁移 `SkyViewPanel.qml`: 100% 保护 GPS/GLO/GAL/BDS/QZS/SBS/NavIC 星座标准领域色，天顶极坐标网格与仰角刻度精细化
+- [x] 迁移 `CommandButtonsPanel.qml`: 接入通用控件库，消除内部 `DenseTextField/DenseComboBox`，指令按钮网格自适应并保留 accent 色彩
+- [x] 迁移 `SignalBarsPanel.qml`: 频段切换 Tab 与星座图例统一，0-50 dB-Hz 参考标尺与门限虚线清晰可辨，柱顶数字等宽排布
+- [x] 迁移 `WorldLocationPanel.qml`: 罗宾逊投影世界地图、昼夜晨昏线光照层与 TEC 电离层叠加层平滑融合
+- [x] 迁移 `DeviationMapPanel.qml`: 4 级距离参考环、N/S/W/E 定位轴线与历史点阵精密化呈现
+- [x] 迁移 `AutoTestPanel.qml`: 动态自动化插件宿主安全注入全量主题 Token 字典，优雅处理回退状态
 
-**Gate 5 门槛**: 8 大面板无功能退化，实时刷新高帧率保持，无 QML binding 断链。
+**Gate 5 门槛验收**: **PASS** (8 大面板无功能退化，GNSS 领域色与协议绑定 100% 保持，实时刷新高帧率保持，零 QML binding 断链)
 
 ---
 

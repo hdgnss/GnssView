@@ -57,7 +57,28 @@ ComboBox {
         }
     }
 
-    contentItem: Text {
+    contentItem: control.editable ? editItem : labelItem
+
+    TextInput {
+        id: editItem
+        visible: control.editable
+        text: control.editText
+        font: control.font
+        color: control.enabled ? theme.textPrimary : theme.textDisabled
+        selectionColor: theme.accentSoft
+        selectedTextColor: theme.textPrimary
+        verticalAlignment: Text.AlignVCenter
+        leftPadding: 10
+        rightPadding: 28
+        selectByMouse: true
+        clip: true
+        inputMethodHints: control.inputMethodHints
+        validator: control.validator
+    }
+
+    Text {
+        id: labelItem
+        visible: !control.editable
         leftPadding: 10
         rightPadding: 28
         text: control.displayText
