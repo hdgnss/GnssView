@@ -8,6 +8,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QWindow>
 
@@ -51,9 +52,23 @@ QIcon loadAppIcon(const QString &applicationDirPath) {
     }
     return {};
 }
+void purgeStaleQmlCache() {
+    const QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!cachePath.isEmpty()) {
+        QDir qmlCacheDir(QDir(cachePath).filePath(QStringLiteral("qmlcache")));
+        if (qmlCacheDir.exists()) {
+            qmlCacheDir.removeRecursively();
+        }
+    }
+}
 }  // namespace
 
 int main(int argc, char *argv[]) {
+    // Disable QML disk caching to guarantee that UI bytecode is always compiled fresh
+    // from installed/bundled QML files. This prevents stale .qmlc bytecode reuse across
+    // package upgrades (deb/rpm/installer) caused by normalized/reproducible build timestamps.
+    qputenv("QML_DISABLE_DISK_CACHE", "1");
+
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QQuickStyle::setFallbackStyle(QStringLiteral("Basic"));
 
@@ -61,6 +76,7 @@ int main(int argc, char *argv[]) {
     QCoreApplication::setApplicationName("GnssView");
     QCoreApplication::setApplicationVersion(hdgnss::UpdateChecker::applicationVersion());
     QCoreApplication::setOrganizationName("hdgnss");
+    purgeStaleQmlCache();
 #if defined(Q_OS_LINUX)
     QGuiApplication::setDesktopFileName(QStringLiteral("com.hdgnss.GnssView"));
 #endif
