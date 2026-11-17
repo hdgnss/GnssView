@@ -139,7 +139,7 @@ Rectangle {
                 spacing: 4
 
                 Text {
-                    text: "GnssView v" + (updateChecker ? updateChecker.currentVersion : "0.1.5")
+                    text: "GnssView v" + (updateChecker ? updateChecker.currentVersion : "0.1.6")
                     color: versionMa.containsMouse ? theme.accent : theme.textSecondary
                     font.family: theme.bodyFont
                     font.pixelSize: 10

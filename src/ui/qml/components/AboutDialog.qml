@@ -78,7 +78,7 @@ Popup {
                 }
 
                 Label {
-                    text: "Version " + (updateChecker ? updateChecker.currentVersion : "0.1.5")
+                    text: "Version " + (updateChecker ? updateChecker.currentVersion : "0.1.6")
                     color: theme.textSecondary
                     font.family: theme.monoFont
                     font.pixelSize: 11
