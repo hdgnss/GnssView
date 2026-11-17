@@ -21,8 +21,8 @@ ApplicationWindow {
     readonly property bool isLinux: Qt.platform.os === "linux"
     readonly property bool useThemedChrome: isWindows || isLinux
     readonly property int chromeInsetTop: 0
-    readonly property int themedHeaderHeight: useThemedChrome ? 42 : 0
-    readonly property int resizeBorder: useThemedChrome && visibility !== Window.Maximized ? 6 : 0
+    readonly property int themedHeaderHeight: useThemedChrome ? 38 : 0
+    readonly property int resizeBorder: useThemedChrome && visibility !== Window.Maximized && visibility !== Window.FullScreen ? 10 : 0
     property bool geometryReady: false
     property bool restoringWindowState: false
 
@@ -176,10 +176,10 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.leftMargin: visibility === Window.Maximized ? 8 : 10
             anchors.rightMargin: visibility === Window.Maximized ? 8 : 10
-            anchors.topMargin: visibility === Window.Maximized ? 8 : 8
-            anchors.bottomMargin: 0
-            height: themedHeaderHeight - (visibility === Window.Maximized ? 8 : 8)
-            radius: visibility === Window.Maximized ? 10 : theme.radius
+            anchors.topMargin: visibility === Window.Maximized ? 2 : 3
+            anchors.bottomMargin: visibility === Window.Maximized ? 2 : 3
+            height: themedHeaderHeight - (visibility === Window.Maximized ? 4 : 6)
+            radius: visibility === Window.Maximized ? 8 : theme.radius
             color: Qt.rgba(theme.surface1.r, theme.surface1.g, theme.surface1.b, 0.84)
             border.width: 1
             border.color: Qt.rgba(theme.accentStrong.r, theme.accentStrong.g, theme.accentStrong.b, 0.18)
@@ -327,6 +327,7 @@ ApplicationWindow {
                         ToolTip.text: "Settings"
 
                         Canvas {
+                            id: settingsCanvas
                             anchors.centerIn: parent
                             width: 15
                             height: 15
@@ -334,7 +335,7 @@ ApplicationWindow {
                                 var ctx = getContext("2d")
                                 ctx.reset()
                                 ctx.strokeStyle = theme.textPrimary
-                                ctx.lineWidth = 1.35
+                                ctx.lineWidth = 1.45
                                 ctx.lineCap = "round"
                                 ctx.beginPath()
                                 for (var i = 0; i < 8; ++i) {
@@ -349,6 +350,13 @@ ApplicationWindow {
                                 ctx.beginPath()
                                 ctx.arc(7.5, 7.5, 1.8, 0, Math.PI * 2)
                                 ctx.stroke()
+                            }
+
+                            Connections {
+                                target: theme
+                                function onIsDarkChanged() {
+                                    settingsCanvas.requestPaint()
+                                }
                             }
                         }
 
@@ -399,6 +407,7 @@ ApplicationWindow {
                         border.color: Qt.rgba(theme.lineStrong.r, theme.lineStrong.g, theme.lineStrong.b, 0.35)
 
                         Canvas {
+                            id: maxCanvas
                             anchors.centerIn: parent
                             width: 11
                             height: 11
@@ -406,12 +415,26 @@ ApplicationWindow {
                                 var ctx = getContext("2d")
                                 ctx.reset()
                                 ctx.strokeStyle = theme.textPrimary
-                                ctx.lineWidth = 1.2
+                                ctx.lineWidth = 1.35
                                 if (window.visibility === Window.Maximized) {
-                                    ctx.strokeRect(1, 3, 8, 8)
-                                    ctx.strokeRect(3, 1, 8, 8)
+                                    ctx.strokeRect(1, 3, 7, 7)
+                                    ctx.strokeRect(3, 1, 7, 7)
                                 } else {
-                                    ctx.strokeRect(1, 1, 10, 10)
+                                    ctx.strokeRect(1, 1, 9, 9)
+                                }
+                            }
+
+                            Connections {
+                                target: theme
+                                function onIsDarkChanged() {
+                                    maxCanvas.requestPaint()
+                                }
+                            }
+
+                            Connections {
+                                target: window
+                                function onVisibilityChanged() {
+                                    maxCanvas.requestPaint()
                                 }
                             }
                         }
@@ -429,16 +452,17 @@ ApplicationWindow {
                         Layout.preferredHeight: 24
                         radius: theme.controlRadius
                         color: closeMouseArea.pressed ? Qt.rgba(theme.bad.r, theme.bad.g, theme.bad.b, 0.95)
-                                                      : Qt.rgba(theme.bad.r, theme.bad.g, theme.bad.b, closeMouseArea.containsMouse ? 0.82 : 0.38)
+                                                      : Qt.rgba(theme.bad.r, theme.bad.g, theme.bad.b, closeMouseArea.containsMouse ? 0.82 : (theme.isDark ? 0.38 : 0.20))
                         border.width: 1
-                        border.color: Qt.rgba(theme.bad.r, theme.bad.g, theme.bad.b, 0.45)
+                        border.color: Qt.rgba(theme.bad.r, theme.bad.g, theme.bad.b, theme.isDark ? 0.45 : 0.40)
 
                         Text {
                             anchors.centerIn: parent
                             text: "\u00d7"
-                            color: theme.textPrimary
+                            color: closeMouseArea.containsMouse ? "#ffffff" : (theme.isDark ? theme.textPrimary : theme.bad)
                             font.family: theme.bodyFont
-                            font.pixelSize: 14
+                            font.pixelSize: 15
+                            font.bold: true
                         }
 
                         MouseArea {
@@ -527,6 +551,7 @@ ApplicationWindow {
     }
 
     Canvas {
+        id: backgroundGridCanvas
         anchors.fill: parent
         opacity: 0.24
         onPaint: {
@@ -568,6 +593,13 @@ ApplicationWindow {
 
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
+
+        Connections {
+            target: theme
+            function onIsDarkChanged() {
+                backgroundGridCanvas.requestPaint()
+            }
+        }
     }
 
     Rectangle {
@@ -588,7 +620,7 @@ ApplicationWindow {
         anchors.leftMargin: visibility === Window.Maximized ? (window.width < 1600 ? 10 : 14) : (window.width < 1600 ? 12 : 18)
         anchors.rightMargin: visibility === Window.Maximized ? (window.width < 1600 ? 10 : 14) : (window.width < 1600 ? 12 : 18)
         anchors.bottomMargin: visibility === Window.Maximized ? (window.height < 920 ? 6 : 10) : (window.height < 920 ? 8 : 12)
-        anchors.topMargin: window.isMac ? (12 + chromeInsetTop) : 2
+        anchors.topMargin: window.isMac ? (12 + chromeInsetTop) : 8
         readonly property int gap: window.height < 920 ? 8 : 12
         readonly property real unitWidth: (width - gap * 3) / 4
         readonly property real unitHeight: (height - gap * 2) / 3
@@ -834,92 +866,105 @@ ApplicationWindow {
         }
     }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors {
-            left: parent.left
-            top: parent.top
-            bottom: parent.bottom
+    Item {
+        id: windowResizeFrame
+        parent: Overlay.overlay
+        anchors.fill: parent
+        visible: window.resizeBorder > 0
+        z: 9999
+
+        readonly property int borderSize: window.resizeBorder
+        readonly property int cornerSize: 18
+
+        // Edges (avoid overlapping corners)
+        MouseArea {
+            anchors {
+                left: parent.left
+                top: parent.top
+                topMargin: windowResizeFrame.cornerSize
+                bottom: parent.bottom
+                bottomMargin: windowResizeFrame.cornerSize
+            }
+            width: windowResizeFrame.borderSize
+            cursorShape: Qt.SizeHorCursor
+            onPressed: mouse => window.startSystemResize(Qt.LeftEdge)
         }
-        width: window.resizeBorder
-        cursorShape: Qt.SizeHorCursor
-        onPressed: mouse => window.startSystemResize(Qt.LeftEdge)
-    }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors {
-            right: parent.right
-            top: parent.top
-            bottom: parent.bottom
+        MouseArea {
+            anchors {
+                right: parent.right
+                top: parent.top
+                topMargin: windowResizeFrame.cornerSize
+                bottom: parent.bottom
+                bottomMargin: windowResizeFrame.cornerSize
+            }
+            width: windowResizeFrame.borderSize
+            cursorShape: Qt.SizeHorCursor
+            onPressed: mouse => window.startSystemResize(Qt.RightEdge)
         }
-        width: window.resizeBorder
-        cursorShape: Qt.SizeHorCursor
-        onPressed: mouse => window.startSystemResize(Qt.RightEdge)
-    }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: parent.top
+        MouseArea {
+            anchors {
+                top: parent.top
+                left: parent.left
+                leftMargin: windowResizeFrame.cornerSize
+                right: parent.right
+                rightMargin: windowResizeFrame.cornerSize
+            }
+            height: windowResizeFrame.borderSize
+            cursorShape: Qt.SizeVerCursor
+            onPressed: mouse => window.startSystemResize(Qt.TopEdge)
         }
-        height: window.resizeBorder
-        cursorShape: Qt.SizeVerCursor
-        onPressed: mouse => window.startSystemResize(Qt.TopEdge)
-    }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors {
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
+        MouseArea {
+            anchors {
+                bottom: parent.bottom
+                left: parent.left
+                leftMargin: windowResizeFrame.cornerSize
+                right: parent.right
+                rightMargin: windowResizeFrame.cornerSize
+            }
+            height: windowResizeFrame.borderSize
+            cursorShape: Qt.SizeVerCursor
+            onPressed: mouse => window.startSystemResize(Qt.BottomEdge)
         }
-        height: window.resizeBorder
-        cursorShape: Qt.SizeVerCursor
-        onPressed: mouse => window.startSystemResize(Qt.BottomEdge)
-    }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors.left: parent.left
-        anchors.top: parent.top
-        width: window.resizeBorder
-        height: window.resizeBorder
-        cursorShape: Qt.SizeFDiagCursor
-        onPressed: mouse => window.startSystemResize(Qt.LeftEdge | Qt.TopEdge)
-    }
+        // 4 Corners
+        MouseArea {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: windowResizeFrame.cornerSize
+            height: windowResizeFrame.cornerSize
+            cursorShape: Qt.SizeFDiagCursor
+            onPressed: mouse => window.startSystemResize(Qt.LeftEdge | Qt.TopEdge)
+        }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors.right: parent.right
-        anchors.top: parent.top
-        width: window.resizeBorder
-        height: window.resizeBorder
-        cursorShape: Qt.SizeBDiagCursor
-        onPressed: mouse => window.startSystemResize(Qt.RightEdge | Qt.TopEdge)
-    }
+        MouseArea {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            width: windowResizeFrame.cornerSize
+            height: windowResizeFrame.cornerSize
+            cursorShape: Qt.SizeBDiagCursor
+            onPressed: mouse => window.startSystemResize(Qt.RightEdge | Qt.TopEdge)
+        }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        width: window.resizeBorder
-        height: window.resizeBorder
-        cursorShape: Qt.SizeBDiagCursor
-        onPressed: mouse => window.startSystemResize(Qt.LeftEdge | Qt.BottomEdge)
-    }
+        MouseArea {
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            width: windowResizeFrame.cornerSize
+            height: windowResizeFrame.cornerSize
+            cursorShape: Qt.SizeBDiagCursor
+            onPressed: mouse => window.startSystemResize(Qt.LeftEdge | Qt.BottomEdge)
+        }
 
-    MouseArea {
-        visible: window.useThemedChrome && window.resizeBorder > 0
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        width: window.resizeBorder
-        height: window.resizeBorder
-        cursorShape: Qt.SizeFDiagCursor
-        onPressed: mouse => window.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+        MouseArea {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: windowResizeFrame.cornerSize
+            height: windowResizeFrame.cornerSize
+            cursorShape: Qt.SizeFDiagCursor
+            onPressed: mouse => window.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
+        }
     }
 
     onWidthChanged: persistWindowState()

@@ -915,44 +915,7 @@ GlassPanel {
     }
 
     function pluginUiStyle() {
-        var semantic = theme.semanticPalette()
-        return {
-            bodyFont: theme.bodyFont,
-            titleFont: theme.titleFont,
-            bodySize: theme.bodySize,
-            labelSize: theme.labelSize,
-            controlHeight: theme.controlHeight,
-            controlRadius: theme.controlRadius,
-            panelRadius: theme.panelRadius,
-            tooltipBg: theme.tooltipBg,
-            panelBorderStrong: theme.panelBorderStrong,
-            textPrimary: theme.textPrimary,
-            textSecondary: theme.textSecondary,
-            inputBg: theme.inputBg,
-            inputBorder: theme.inputBorder,
-            inputBorderFocus: theme.inputBorderFocus,
-            surface3: theme.surface3,
-            semantic: semantic,
-            semanticPosition: semantic.position,
-            semanticTime: semantic.time,
-            semanticMotion: semantic.motion,
-            semanticPrecision: semantic.precision,
-            semanticCorrection: semantic.correction,
-            semanticPower: semantic.power,
-            semanticRf: semantic.rf,
-            semanticData: semantic.data,
-            semanticContext: semantic.context,
-            semanticNeutral: semantic.neutral,
-            semanticHealthGood: semantic.healthGood,
-            semanticHealthWarn: semantic.healthWarn,
-            semanticHealthBad: semantic.healthBad,
-            semanticColor: function(role, value, fallbackColor) {
-                return theme.semanticColor(role, value, fallbackColor)
-            },
-            metricAccentColor: function(role, value, valueText, emphasize) {
-                return theme.metricAccentColor(role, value, valueText, emphasize)
-            }
-        }
+        return theme.pluginStyle()
     }
 
     component CustomPluginUi: Item {

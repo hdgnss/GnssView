@@ -1,8 +1,18 @@
 # GnssView UI 优化分阶段执行计划 (Optimization Plan)
 
 **分支**: `feature/ui-modernization` (基于 `origin/master` @ `0a04617`)  
-**状态**: Phase 1 完成 (Gate 1 通过)，准备进入 Phase 2  
+**状态**: Phase 6 完成，当前进行用户验收反馈微调 (Post-Phase 6 Refinements)  
 **上次更新**: 2026-11-16  
+
+---
+
+## 门禁核心规则 (Hard Gate Constraints)
+
+> [!CAUTION]
+> **目录隔离与搜索门禁 (Directory & Search Gate)**:
+> 1. **严禁越界搜索**: 禁止在项目工作区根目录 (`/home/wayne/Code/hdgnss/GnssView`) 及其允许的同级子插件仓库目录（`GnssView`, `GnssViewAutoTest`, `GnssViewBream`, `GnssViewConnection`）以外的任何目录执行搜索或读写操作。
+> 2. **禁止擅自全局搜索**: 绝不擅自执行全磁盘或上级目录递归搜索。
+> 3. **及时提问对齐**: 凡遇到需求模糊、配置来源不明确或细节存疑之处，必须第一时间向用户明确提问沟通，严禁擅自猜测或盲目尝试。
 
 ---
 

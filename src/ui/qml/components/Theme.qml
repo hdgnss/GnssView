@@ -190,6 +190,7 @@ QtObject {
     readonly property int panelContentMargin: isCompact ? 8 : 12
     readonly property int compactSpacing: isCompact ? 6 : 8
     readonly property int sectionSpacing: isCompact ? 8 : 12
+    readonly property int checkIndicatorSize: isCompact ? 16 : 18
 
     // Typography sizes
     readonly property int titleSize: 14
@@ -222,6 +223,94 @@ QtObject {
             healthGood: semanticHealthGood,
             healthWarn: semanticHealthWarn,
             healthBad: semanticHealthBad
+        }
+    }
+
+    // Single source of the style-token map injected into plugin-provided UI.
+    // Plugins only declare controls and layout; every colour, font, radius and
+    // metric they render comes from this map. Add new tokens here only.
+    function pluginStyle() {
+        var semantic = semanticPalette()
+        return {
+            isDark: isDark,
+            // typography
+            bodyFont: bodyFont,
+            monoFont: monoFont,
+            titleFont: titleFont,
+            bodySize: bodySize,
+            labelSize: labelSize,
+            // metrics
+            controlHeight: controlHeight,
+            controlRadius: controlRadius,
+            pillRadius: pillRadius,
+            panelRadius: panelRadius,
+            sectionSpacing: sectionSpacing,
+            compactSpacing: compactSpacing,
+            checkIndicatorSize: checkIndicatorSize,
+            // text
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            textDisabled: textDisabled,
+            hoverText: hoverText,
+            caption: caption,
+            // accent & state
+            accent: accent,
+            accentStrong: accentStrong,
+            accentSoft: accentSoft,
+            focusRing: focusRing,
+            onAccent: buttonPrimaryText,
+            bad: bad,
+            ok: ok,
+            warning: warning,
+            // inputs
+            inputBg: inputBg,
+            inputBorder: inputBorder,
+            inputBorderFocus: inputBorderFocus,
+            // surfaces & borders
+            surface0: surface0,
+            surface1: surface1,
+            surface2: surface2,
+            surface3: surface3,
+            surface4: surface4,
+            panelBase: panelBase,
+            chartBg: chartBg,
+            tooltipBg: tooltipBg,
+            tooltipText: tooltipText,
+            tooltipDetail: tooltipDetail,
+            panelBorder: panelBorder,
+            panelBorderStrong: panelBorderStrong,
+            border: border,
+            borderStrong: borderStrong,
+            borderSubtle: borderSubtle,
+            borderHover: borderHover,
+            // tabs
+            tabBarBg: tabBarBg,
+            tabBarBorder: tabBarBorder,
+            tabButtonBg: tabButtonBg,
+            tabButtonHover: tabButtonHover,
+            tabButtonActive: tabButtonActive,
+            tabSelectedAccent: tabSelectedAccent,
+            // semantic palette
+            semantic: semantic,
+            semanticPosition: semantic.position,
+            semanticTime: semantic.time,
+            semanticMotion: semantic.motion,
+            semanticPrecision: semantic.precision,
+            semanticCorrection: semantic.correction,
+            semanticPower: semantic.power,
+            semanticRf: semantic.rf,
+            semanticData: semantic.data,
+            semanticContext: semantic.context,
+            semanticNeutral: semantic.neutral,
+            semanticHealthGood: semantic.healthGood,
+            semanticHealthWarn: semantic.healthWarn,
+            semanticHealthBad: semantic.healthBad,
+            semanticColor: function(role, value, fallbackColor) {
+                return semanticColor(role, value, fallbackColor)
+            },
+            metricAccentColor: function(role, value, valueText, emphasize) {
+                return metricAccentColor(role, value, valueText, emphasize)
+            }
         }
     }
 

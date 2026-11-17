@@ -127,6 +127,10 @@ int main(int argc, char *argv[]) {
             updateChecker.checkForUpdates(true);
         });
     }
+    const int autoQuitMs = qEnvironmentVariableIntValue("HDGNSS_AUTO_QUIT_MS");
+    if (autoQuitMs > 0) {
+        QTimer::singleShot(autoQuitMs, &app, &QCoreApplication::quit);
+    }
     if (!engine.rootObjects().isEmpty()) {
         if (auto *window = qobject_cast<QWindow *>(engine.rootObjects().constFirst())) {
             if (!appIcon.isNull()) {
