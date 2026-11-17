@@ -102,6 +102,7 @@ double lerp(double a, double b, double t) {
 QPointF projectedCanvasPointForTest(double width, double height, double lonDeg, double latDeg) {
     static constexpr double kWorldMinY = -91.296;
     static constexpr double kWorldHeight = 182.592;
+    static constexpr double kCentralMeridian = 11.0;
     static constexpr double kRobinsonX[] = {
         1.0, 0.9986, 0.9954, 0.99, 0.9822, 0.973, 0.96, 0.9427, 0.9216,
         0.8962, 0.8679, 0.835, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213,
@@ -119,7 +120,12 @@ QPointF projectedCanvasPointForTest(double width, double height, double lonDeg, 
     const double ratio = (absLat - bandStart) / 5.0;
     const double xFactor = lerp(kRobinsonX[bandIndex], kRobinsonX[bandIndex + 1], ratio);
     const double yFactor = lerp(kRobinsonY[bandIndex], kRobinsonY[bandIndex + 1], ratio);
-    const double projectedX = lonDeg * xFactor;
+    double diff = std::fmod(lonDeg - kCentralMeridian + 180.0, 360.0);
+    if (diff < 0.0) {
+        diff += 360.0;
+    }
+    const double relLon = diff - 180.0;
+    const double projectedX = clamp(relLon, -180.0, 180.0) * xFactor;
     const double projectedY = (latDeg >= 0.0 ? -1.0 : 1.0) * 90.0 * 1.0144 * yFactor;
     return {
         (projectedX + 180.0) / 360.0 * width,
@@ -1277,6 +1283,44 @@ bool expectTecSampleLookupByCanvasPoint() {
                   "TEC sample lookup should return the raw TEC value");
 }
 
+bool expectRobinsonProjectionAlignsWithNaturalEarthMap() {
+    const double width = 360.0;
+    const double height = 182.592;
+
+    // Shanghai GNSS coordinate reported by user: 31.2077182 N, 121.5868428 E
+    const QPointF shanghai = projectedCanvasPointForTest(width, height, 121.5868428, 31.2077182);
+    // In world-map-robinson.svg (viewBox -180 -91.296 360 182.592):
+    // Central meridian is 11.0° E, so relative lon is ~110.59°
+    // Projected X coordinate relative to origin: ~105.70
+    // Canvas X in [0, 360]: 105.70 + 180 = 285.70 (normalized ratio ~0.7936)
+    // Previously, without central meridian adjustment, X was ~116.21 + 180 = 296.21 (ratio ~0.8228), which landed in southern Japan.
+    const double shanghaiSvgX = shanghai.x() - 180.0;
+    if (!expect(std::abs(shanghaiSvgX - 105.70) < 0.25,
+                "Shanghai Robinson projection X coordinate must align with China coastline (around 105.70), not southern Japan (116+)")) {
+        return false;
+    }
+
+    // London (Greenwich): 51.48 N, 0.0 E
+    // With central meridian 11.0 E, relLon is -11.0, X in SVG should be ~ -9.44
+    const QPointF london = projectedCanvasPointForTest(width, height, 0.0, 51.48);
+    const double londonSvgX = london.x() - 180.0;
+    if (!expect(std::abs(londonSvgX - (-9.44)) < 0.25,
+                "Greenwich Robinson projection X must be west of central meridian (around -9.44)")) {
+        return false;
+    }
+
+    // Tokyo: 35.68 N, 139.69 E
+    // With central meridian 11.0 E, relLon is ~128.69, X in SVG should be ~ 120.9
+    const QPointF tokyo = projectedCanvasPointForTest(width, height, 139.69, 35.68);
+    const double tokyoSvgX = tokyo.x() - 180.0;
+    if (!expect(std::abs(tokyoSvgX - 120.9) < 0.5,
+                "Tokyo Robinson projection X must align with Japan Honshu (around 120.9)")) {
+        return false;
+    }
+
+    return true;
+}
+
 bool expectTcpClientTransportCompactsReadBuffer() {
     QTcpServer server;
     if (!expect(server.listen(QHostAddress::LocalHost, 0), "TCP test server should listen on localhost")) {
@@ -1804,6 +1848,9 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     if (!expectTecSampleLookupByCanvasPoint()) {
+        return EXIT_FAILURE;
+    }
+    if (!expectRobinsonProjectionAlignsWithNaturalEarthMap()) {
         return EXIT_FAILURE;
     }
     if (!expectTcpClientTransportCompactsReadBuffer()) {

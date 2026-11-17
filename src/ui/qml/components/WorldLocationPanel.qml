@@ -26,6 +26,7 @@ GlassPanel {
     readonly property string ionexDatasetLabel: tecMapOverlayModel ? tecMapOverlayModel.datasetLabel : ""
     readonly property real worldMinY: -91.296
     readonly property real worldHeight: 182.592
+    readonly property real centralMeridian: 11.0
     readonly property var robinsonX: [
         1.0, 0.9986, 0.9954, 0.99, 0.9822, 0.973, 0.96, 0.9427, 0.9216,
         0.8962, 0.8679, 0.835, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213,
@@ -94,8 +95,16 @@ GlassPanel {
         return source.displayName || source.pluginId || ("Source " + (index + 1))
     }
 
-    function robinsonProject(lonDeg, latDeg) {
-        if (!isFinite(lonDeg) || !isFinite(latDeg)) {
+    function wrapRelativeLongitude(lonDeg) {
+        var diff = (lonDeg - centralMeridian + 180) % 360
+        if (diff < 0) {
+            diff += 360
+        }
+        return diff - 180
+    }
+
+    function robinsonProjectRel(relLonDeg, latDeg) {
+        if (!isFinite(relLonDeg) || !isFinite(latDeg)) {
             return Qt.point(NaN, NaN)
         }
 
@@ -105,17 +114,21 @@ GlassPanel {
         var ratio = (absLat - bandStart) / 5
         var xFactor = lerp(robinsonX[bandIndex], robinsonX[bandIndex + 1], ratio)
         var yFactor = lerp(robinsonY[bandIndex], robinsonY[bandIndex + 1], ratio)
-        var x = lonDeg * xFactor
+        var x = clamp(relLonDeg, -180, 180) * xFactor
         var y = (latDeg >= 0 ? -1 : 1) * 90 * 1.0144 * yFactor
         return Qt.point(x, y)
     }
 
-    function projectedCanvasPoint(widthValue, heightValue, lonDeg, latDeg) {
+    function robinsonProject(lonDeg, latDeg) {
+        return robinsonProjectRel(wrapRelativeLongitude(lonDeg), latDeg)
+    }
+
+    function projectedCanvasPointRel(widthValue, heightValue, relLonDeg, latDeg) {
         if (widthValue <= 0 || heightValue <= 0) {
             return Qt.point(NaN, NaN)
         }
 
-        var projected = robinsonProject(lonDeg, latDeg)
+        var projected = robinsonProjectRel(relLonDeg, latDeg)
         if (!isFinite(projected.x) || !isFinite(projected.y)) {
             return Qt.point(NaN, NaN)
         }
@@ -124,6 +137,10 @@ GlassPanel {
             (projected.x + 180) / 360 * widthValue,
             (projected.y - worldMinY) / worldHeight * heightValue
         )
+    }
+
+    function projectedCanvasPoint(widthValue, heightValue, lonDeg, latDeg) {
+        return projectedCanvasPointRel(widthValue, heightValue, wrapRelativeLongitude(lonDeg), latDeg)
     }
 
     function julianDay(dateValue) {
@@ -195,8 +212,9 @@ GlassPanel {
         }
 
         var span = radiansToDegrees(Math.acos(argument))
-        var start = subsolarLongitude - span
-        var end = subsolarLongitude + span
+        var relSubsolar = wrapRelativeLongitude(subsolarLongitude)
+        var start = relSubsolar - span
+        var end = relSubsolar + span
 
         if (start < -180) {
             return [
@@ -214,8 +232,8 @@ GlassPanel {
         return [{ start: start, end: end }]
     }
 
-    function drawProjectedBand(ctx, widthValue, heightValue, lat0, lat1, lonStart, lonEnd) {
-        if (lonEnd <= lonStart) {
+    function drawProjectedBand(ctx, widthValue, heightValue, lat0, lat1, relLonStart, relLonEnd) {
+        if (relLonEnd <= relLonStart) {
             return
         }
 
@@ -223,8 +241,8 @@ GlassPanel {
         var first = true
         ctx.beginPath()
 
-        for (var lon = lonStart; lon <= lonEnd + 0.001; lon += step) {
-            var p0 = projectedCanvasPoint(widthValue, heightValue, lon > lonEnd ? lonEnd : lon, lat0)
+        for (var relLon = relLonStart; relLon <= relLonEnd + 0.001; relLon += step) {
+            var p0 = projectedCanvasPointRel(widthValue, heightValue, relLon > relLonEnd ? relLonEnd : relLon, lat0)
             if (!isFinite(p0.x) || !isFinite(p0.y)) {
                 continue
             }
@@ -236,18 +254,18 @@ GlassPanel {
             }
         }
 
-        var edgeTop = projectedCanvasPoint(widthValue, heightValue, lonEnd, lat0)
+        var edgeTop = projectedCanvasPointRel(widthValue, heightValue, relLonEnd, lat0)
         ctx.lineTo(edgeTop.x, edgeTop.y)
 
-        for (var lonBack = lonEnd; lonBack >= lonStart - 0.001; lonBack -= step) {
-            var p1 = projectedCanvasPoint(widthValue, heightValue, lonBack < lonStart ? lonStart : lonBack, lat1)
+        for (var relLonBack = relLonEnd; relLonBack >= relLonStart - 0.001; relLonBack -= step) {
+            var p1 = projectedCanvasPointRel(widthValue, heightValue, relLonBack < relLonStart ? relLonStart : relLonBack, lat1)
             if (!isFinite(p1.x) || !isFinite(p1.y)) {
                 continue
             }
             ctx.lineTo(p1.x, p1.y)
         }
 
-        var edgeBottom = projectedCanvasPoint(widthValue, heightValue, lonStart, lat1)
+        var edgeBottom = projectedCanvasPointRel(widthValue, heightValue, relLonStart, lat1)
         ctx.lineTo(edgeBottom.x, edgeBottom.y)
         ctx.closePath()
         ctx.fill()
@@ -308,7 +326,7 @@ GlassPanel {
         Image {
             id: basemap
             anchors.fill: parent
-            source: theme.lightMode ? "assets/world-map-robinson.svg" : "assets/worldUltra.svg"
+            source: "assets/world-map-robinson.svg"
             fillMode: Image.PreserveAspectFit
             opacity: theme.lightMode ? 0.42 : 1.0
             smooth: true

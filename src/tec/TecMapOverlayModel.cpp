@@ -31,6 +31,7 @@ QString overlayDirectoryPath() {
 
 constexpr double kWorldMinY = -91.296;
 constexpr double kWorldHeight = 182.592;
+constexpr double kCentralMeridian = 11.0;
 constexpr double kDefaultLonStepDegrees = 5.0;
 constexpr double kDefaultLatStepDegrees = 2.5;
 
@@ -53,8 +54,16 @@ double lerp(double a, double b, double t) {
     return a + (b - a) * t;
 }
 
-QPointF robinsonProject(double lonDeg, double latDeg) {
-    if (!std::isfinite(lonDeg) || !std::isfinite(latDeg)) {
+double wrapRelativeLongitude(double lonDeg) {
+    double diff = std::fmod(lonDeg - kCentralMeridian + 180.0, 360.0);
+    if (diff < 0.0) {
+        diff += 360.0;
+    }
+    return diff - 180.0;
+}
+
+QPointF robinsonProjectRel(double relLonDeg, double latDeg) {
+    if (!std::isfinite(relLonDeg) || !std::isfinite(latDeg)) {
         return {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()};
     }
 
@@ -64,9 +73,13 @@ QPointF robinsonProject(double lonDeg, double latDeg) {
     const double ratio = (absLat - bandStart) / 5.0;
     const double xFactor = lerp(kRobinsonX[bandIndex], kRobinsonX[bandIndex + 1], ratio);
     const double yFactor = lerp(kRobinsonY[bandIndex], kRobinsonY[bandIndex + 1], ratio);
-    const double x = lonDeg * xFactor;
+    const double x = clamp(relLonDeg, -180.0, 180.0) * xFactor;
     const double y = (latDeg >= 0.0 ? -1.0 : 1.0) * 90.0 * 1.0144 * yFactor;
     return {x, y};
+}
+
+QPointF robinsonProject(double lonDeg, double latDeg) {
+    return robinsonProjectRel(wrapRelativeLongitude(lonDeg), latDeg);
 }
 
 QPointF projectedCanvasPoint(double width, double height, double lonDeg, double latDeg) {
@@ -87,6 +100,15 @@ QPainterPath cellPath(double width,
                       double lonMax,
                       double latMin,
                       double latMax) {
+    const double relMin = wrapRelativeLongitude(lonMin);
+    const double relMax = wrapRelativeLongitude(lonMax);
+    if (relMin > relMax && lonMax > lonMin) {
+        const double seamLon = kCentralMeridian - 180.0;
+        QPainterPath path = cellPath(width, height, lonMin, seamLon - 1e-4, latMin, latMax);
+        path.addPath(cellPath(width, height, seamLon + 1e-4, lonMax, latMin, latMax));
+        return path;
+    }
+
     const double stepDegrees = std::max(0.5, (lonMax - lonMin) / 4.0);
     QPainterPath path;
     bool firstPoint = true;

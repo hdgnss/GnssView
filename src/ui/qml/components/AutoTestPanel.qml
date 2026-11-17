@@ -104,70 +104,7 @@ GlassPanel {
     }
 
     function panelStyle() {
-        var semantic = theme.semanticPalette()
-        return {
-            bodyFont:          theme.bodyFont,
-            monoFont:          theme.monoFont,
-            titleFont:         theme.titleFont,
-            bodySize:          theme.bodySize,
-            labelSize:         theme.labelSize,
-            controlHeight:     theme.controlHeight,
-            controlRadius:     theme.controlRadius,
-            pillRadius:        theme.pillRadius,
-            panelRadius:       theme.panelRadius,
-            sectionSpacing:    theme.sectionSpacing,
-            textPrimary:       theme.textPrimary,
-            textSecondary:     theme.textSecondary,
-            hoverText:         theme.hoverText,
-            caption:           theme.caption,
-            accent:            theme.accent,
-            bad:               theme.bad,
-            ok:                theme.ok,
-            warning:           theme.warning,
-            inputBg:           theme.inputBg,
-            inputBorder:       theme.inputBorder,
-            inputBorderFocus:  theme.inputBorderFocus,
-            surface0:          theme.surface0,
-            surface1:          theme.surface1,
-            surface2:          theme.surface2,
-            surface3:          theme.surface3,
-            surface4:          theme.surface4,
-            panelBase:         theme.panelBase,
-            chartBg:           theme.chartBg,
-            tooltipBg:         theme.tooltipBg,
-            tooltipText:       theme.tooltipText,
-            tooltipDetail:     theme.tooltipDetail,
-            panelBorder:       theme.panelBorder,
-            panelBorderStrong: theme.panelBorderStrong,
-            border:            theme.border,
-            borderStrong:      theme.borderStrong,
-            tabBarBg:          theme.tabBarBg,
-            tabBarBorder:      theme.tabBarBorder,
-            tabButtonBg:       theme.tabButtonBg,
-            tabButtonHover:    theme.tabButtonHover,
-            tabButtonActive:   theme.tabButtonActive,
-            tabSelectedAccent: theme.tabSelectedAccent,
-            semantic:          semantic,
-            semanticPosition:  semantic.position,
-            semanticTime:      semantic.time,
-            semanticMotion:    semantic.motion,
-            semanticPrecision: semantic.precision,
-            semanticCorrection: semantic.correction,
-            semanticPower:     semantic.power,
-            semanticRf:        semantic.rf,
-            semanticData:      semantic.data,
-            semanticContext:   semantic.context,
-            semanticNeutral:   semantic.neutral,
-            semanticHealthGood: semantic.healthGood,
-            semanticHealthWarn: semantic.healthWarn,
-            semanticHealthBad: semantic.healthBad,
-            semanticColor: function(role, value, fallbackColor) {
-                return theme.semanticColor(role, value, fallbackColor)
-            },
-            metricAccentColor: function(role, value, valueText, emphasize) {
-                return theme.metricAccentColor(role, value, valueText, emphasize)
-            }
-        }
+        return theme.pluginStyle()
     }
 
     // ── Fallback overlay (plugin not loaded) ──────────────────────────────

@@ -100,10 +100,10 @@ GlassPanel {
             NeonTabBar {
                 id: tabs
                 Layout.fillWidth: true
-                NeonTabButton { text: root.bandTabs[0].label; minButtonWidth: 132; accent: theme.accentStrong }
-                NeonTabButton { text: root.bandTabs[1].label; minButtonWidth: 112; accent: theme.accentStrong }
-                NeonTabButton { text: root.bandTabs[2].label; minButtonWidth: 112; accent: theme.accentStrong }
-                NeonTabButton { text: root.bandTabs[3].label; minButtonWidth: 112; accent: theme.accentStrong }
+                NeonTabButton { text: root.bandTabs[0].label; minButtonWidth: 80; accent: theme.accentStrong }
+                NeonTabButton { text: root.bandTabs[1].label; minButtonWidth: 50; accent: theme.accentStrong }
+                NeonTabButton { text: root.bandTabs[2].label; minButtonWidth: 60; accent: theme.accentStrong }
+                NeonTabButton { text: root.bandTabs[3].label; minButtonWidth: 60; accent: theme.accentStrong }
             }
 
             Rectangle {

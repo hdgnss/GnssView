@@ -73,118 +73,10 @@ GlassPanel {
         wrapMode: Text.WordWrap
     }
 
-    component DenseTextField: TextField {
-        id: denseControl
-        implicitHeight: theme.controlHeight
-        font.family: theme.bodyFont
-        font.pixelSize: theme.bodySize
-        color: (!enabled || readOnly) ? theme.textSecondary : theme.textPrimary
-        selectByMouse: true
-        background: Rectangle {
-            radius: theme.controlRadius
-            color: (!denseControl.enabled || denseControl.readOnly) ? Qt.rgba(theme.inputBg.r, theme.inputBg.g, theme.inputBg.b, 0.45) : theme.inputBg
-            border.width: 1
-            border.color: (!denseControl.enabled || denseControl.readOnly) ? theme.panelBorder : (denseControl.activeFocus ? theme.inputBorderFocus : theme.inputBorder)
-        }
+    component DenseTextField: AppTextField {
     }
 
-    component DenseComboBox: ComboBox {
-        id: combo
-        implicitHeight: theme.controlHeight
-        font.family: theme.bodyFont
-        font.pixelSize: theme.bodySize
-        displayText: {
-            if (editable && editText.length > 0) {
-                return editText
-            }
-            return root.comboDisplayValue(combo)
-        }
-        leftPadding: 0
-        rightPadding: 0
-        background: Rectangle {
-            radius: theme.controlRadius
-            color: theme.inputBg
-            border.width: 1
-            border.color: parent.activeFocus ? theme.inputBorderFocus : theme.inputBorder
-            antialiasing: true
-        }
-        contentItem: Text {
-            leftPadding: 10
-            rightPadding: 26
-            text: parent.displayText
-            color: theme.textPrimary
-            font: parent.font
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        indicator: Canvas {
-            x: parent.width - width - 8
-            y: (parent.height - height) / 2
-            width: 10
-            height: 6
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.reset()
-                ctx.fillStyle = theme.textSecondary
-                ctx.beginPath()
-                ctx.moveTo(0, 0)
-                ctx.lineTo(width, 0)
-                ctx.lineTo(width / 2, height)
-                ctx.closePath()
-                ctx.fill()
-            }
-        }
-        delegate: ItemDelegate {
-            width: ListView.view ? ListView.view.width : parent.width
-            height: theme.controlHeight
-            highlighted: combo.highlightedIndex === index
-            padding: 0
-            contentItem: Text {
-                text: {
-                    var item = modelData
-                    if (item && item.label !== undefined) {
-                        return String(item.label)
-                    }
-                    return String(modelData)
-                }
-                leftPadding: 10
-                rightPadding: 10
-                color: highlighted ? theme.textPrimary : theme.textSecondary
-                font.family: theme.bodyFont
-                font.pixelSize: theme.bodySize
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-            background: Rectangle {
-                radius: theme.controlRadius - 2
-                color: highlighted ? theme.tabButtonActive : (combo.currentIndex === index ? theme.surface3 : "transparent")
-                border.width: highlighted ? 1 : 0
-                border.color: highlighted ? theme.inputBorderFocus : "transparent"
-            }
-        }
-        popup: Popup {
-            y: combo.height + 6
-            width: combo.width
-            padding: 6
-            implicitHeight: Math.min(contentItem.implicitHeight + 12, 220)
-            background: Rectangle {
-                radius: theme.panelRadius
-                color: theme.tooltipBg
-                border.width: 1
-                border.color: theme.panelBorderStrong
-                antialiasing: true
-            }
-            contentItem: ListView {
-                clip: true
-                implicitHeight: contentHeight
-                model: combo.popup.visible ? combo.delegateModel : null
-                currentIndex: combo.highlightedIndex
-                spacing: 4
-                ScrollBar.vertical: ScrollBar {
-                    policy: ListView.view && ListView.view.contentHeight > ListView.view.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                }
-            }
-        }
+    component DenseComboBox: AppComboBox {
     }
 
     function invoke(methodName, args) {
@@ -1023,44 +915,7 @@ GlassPanel {
     }
 
     function pluginUiStyle() {
-        var semantic = theme.semanticPalette()
-        return {
-            bodyFont: theme.bodyFont,
-            titleFont: theme.titleFont,
-            bodySize: theme.bodySize,
-            labelSize: theme.labelSize,
-            controlHeight: theme.controlHeight,
-            controlRadius: theme.controlRadius,
-            panelRadius: theme.panelRadius,
-            tooltipBg: theme.tooltipBg,
-            panelBorderStrong: theme.panelBorderStrong,
-            textPrimary: theme.textPrimary,
-            textSecondary: theme.textSecondary,
-            inputBg: theme.inputBg,
-            inputBorder: theme.inputBorder,
-            inputBorderFocus: theme.inputBorderFocus,
-            surface3: theme.surface3,
-            semantic: semantic,
-            semanticPosition: semantic.position,
-            semanticTime: semantic.time,
-            semanticMotion: semantic.motion,
-            semanticPrecision: semantic.precision,
-            semanticCorrection: semantic.correction,
-            semanticPower: semantic.power,
-            semanticRf: semantic.rf,
-            semanticData: semantic.data,
-            semanticContext: semantic.context,
-            semanticNeutral: semantic.neutral,
-            semanticHealthGood: semantic.healthGood,
-            semanticHealthWarn: semantic.healthWarn,
-            semanticHealthBad: semantic.healthBad,
-            semanticColor: function(role, value, fallbackColor) {
-                return theme.semanticColor(role, value, fallbackColor)
-            },
-            metricAccentColor: function(role, value, valueText, emphasize) {
-                return theme.metricAccentColor(role, value, valueText, emphasize)
-            }
-        }
+        return theme.pluginStyle()
     }
 
     component CustomPluginUi: Item {

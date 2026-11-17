@@ -223,14 +223,17 @@ GlassPanel {
             spacing: compact ? 0 : 1
 
             Label {
+                Layout.fillWidth: true
                 text: heading
                 color: theme.textSecondary
                 font.family: theme.bodyFont
                 font.pixelSize: compact ? Math.max(9, theme.labelSize - 1) : theme.labelSize
+                elide: Text.ElideRight
                 Layout.alignment: Qt.AlignVCenter
             }
 
             Label {
+                Layout.fillWidth: true
                 text: valueText
                 color: theme.textPrimary
                 font.family: theme.monoFont
@@ -243,6 +246,7 @@ GlassPanel {
             }
 
             Label {
+                Layout.fillWidth: true
                 visible: subText.length > 0
                 text: subText
                 color: theme.caption
@@ -276,7 +280,6 @@ GlassPanel {
                 GridLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.alignment: Qt.AlignTop
                     columns: gridColumns
                     columnSpacing: 6
                     rowSpacing: 6
@@ -286,6 +289,7 @@ GlassPanel {
 
                         delegate: MetricCard {
                             Layout.fillWidth: true
+                            Layout.fillHeight: true
                             compact: true
                             heading: modelData.label || "--"
                             valueText: modelData.valueText || "--"
@@ -294,8 +298,6 @@ GlassPanel {
                         }
                     }
                 }
-
-                Item { Layout.fillHeight: true }
             }
         }
 
